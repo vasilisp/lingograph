@@ -15,10 +15,12 @@ const (
 	Assistant
 )
 
+type actorID uint32
+
 type Message struct {
 	Role    Role
 	Content string
-	Actor   Actor
+	actor   actorID
 }
 
 type Chat interface {
@@ -44,8 +46,6 @@ func NewSliceChat() Chat {
 
 type chainLink func(history []Message) (Message, error)
 
-type actorID uint64
-
 const (
 	systemActorID actorID = 0
 	userActorID   actorID = 1
@@ -53,10 +53,8 @@ const (
 
 var nextActorID uint64 = 2
 
-type Actor interface {
-	id() actorID
-	role() Role
-	generate() chainLink
+type Pipeline interface {
+	Execute(chat Chat) error
 }
 
 type staticActor struct {
@@ -65,91 +63,73 @@ type staticActor struct {
 	message string
 }
 
-func (a staticActor) id() actorID {
-	return a.actorID
+func (a staticActor) Execute(chat Chat) error {
+	chat.write(Message{Role: a.roleID, Content: a.message})
+	return nil
 }
 
-func (a staticActor) role() Role {
-	return a.roleID
-}
-
-func (a staticActor) generate() chainLink {
-	return func(history []Message) (Message, error) {
-		return Message{Role: a.roleID, Content: a.message}, nil
-	}
-}
-
-func newStaticActor(actorID actorID, role Role, message string) Actor {
+func newStaticActor(actorID actorID, role Role, message string) Pipeline {
 	return staticActor{actorID: actorID, roleID: role, message: message}
 }
 
-func NewSystemPrompt(message string) Actor {
+func NewSystemPrompt(message string) Pipeline {
 	return newStaticActor(systemActorID, System, message)
 }
 
-func NewUserPrompt(message string) Actor {
+func NewUserPrompt(message string) Pipeline {
 	return newStaticActor(userActorID, User, message)
 }
 
-type programmaticActor struct {
+type ProgrammaticActor struct {
 	actorID actorID
 	roleID  Role
 	fn      func(history []Message) (string, error)
 }
 
-func (a programmaticActor) id() actorID {
-	return a.actorID
-}
-
-func (a programmaticActor) role() Role {
-	return a.roleID
-}
-
-func (a programmaticActor) generate() chainLink {
-	return func(history []Message) (Message, error) {
-		content, err := a.fn(history)
-		if err != nil {
-			return Message{}, err
-		}
-		return Message{Role: a.roleID, Content: content}, nil
+func (a ProgrammaticActor) Execute(chat Chat) error {
+	content, err := a.fn(chat.History())
+	if err != nil {
+		return err
 	}
+
+	chat.write(Message{Role: a.roleID, Content: content})
+
+	return nil
 }
 
-func NewProgrammaticActor(role Role, fn func(history []Message) (string, error)) Actor {
+func NewProgrammaticActor(role Role, fn func(history []Message) (string, error)) Pipeline {
 	id := atomic.AddUint64(&nextActorID, 1)
-	return programmaticActor{
+
+	return ProgrammaticActor{
 		actorID: actorID(id),
 		roleID:  role,
 		fn:      fn,
 	}
 }
 
-type Pipeline interface {
-	Execute(chat Chat) error
-}
-
 type chain struct {
-	links []chainLink
+	links []Pipeline
 }
 
 func (c chain) Execute(chat Chat) error {
 	for _, link := range c.links {
-		message, err := link(chat.History())
+		err := link.Execute(chat)
 		if err != nil {
 			return err
 		}
-		chat.write(message)
 	}
 
 	return nil
 }
 
-func NewChain(actor1, actor2 Actor, actors ...Actor) Pipeline {
-	links := make([]chainLink, 0, len(actors)+2)
-	links = append(links, actor1.generate(), actor2.generate())
-	for _, actor := range actors {
-		links = append(links, actor.generate())
+func NewChain(pipeline1, pipeline2 Pipeline, pipelines ...Pipeline) Pipeline {
+	links := make([]Pipeline, 0, len(pipelines)+2)
+
+	links = append(links, pipeline1, pipeline2)
+	for _, pipeline := range pipelines {
+		links = append(links, pipeline)
 	}
+
 	return chain{links: links}
 }
 
@@ -165,7 +145,7 @@ func split(chat Chat) chatSplitter {
 	}
 }
 
-func (c chatSplitter) history() []Message {
+func (c chatSplitter) History() []Message {
 	return c.oldMessages
 }
 
@@ -174,11 +154,18 @@ func (c chatSplitter) write(message Message) {
 }
 
 type parallel struct {
-	links []chainLink
+	links []Pipeline
 }
 
-func NewParallel(link1, link2 chainLink, links ...chainLink) Pipeline {
-	return parallel{links: append([]chainLink{link1, link2}, links...)}
+func NewParallel(pipeline1, pipeline2 Pipeline, pipelines ...Pipeline) Pipeline {
+	links := make([]Pipeline, 0, len(pipelines)+2)
+
+	links = append(links, pipeline1, pipeline2)
+	for _, pipeline := range pipelines {
+		links = append(links, pipeline)
+	}
+
+	return parallel{links: links}
 }
 
 func (p parallel) Execute(chat Chat) error {
@@ -195,14 +182,13 @@ func (p parallel) Execute(chat Chat) error {
 
 	fn := func(i int) {
 		splitter := splitters[i]
-		message, err := p.links[i](splitter.history())
+		err := p.links[i].Execute(splitter)
 		if err != nil {
 			mu.Lock()
 			errors = append(errors, err)
 			mu.Unlock()
 			return
 		}
-		splitter.write(message)
 		wg.Done()
 	}
 
