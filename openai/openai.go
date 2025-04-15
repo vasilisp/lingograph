@@ -35,7 +35,7 @@ func (m ChatModel) ToOpenAI() openai.ChatModel {
 
 type Model struct {
 	client  *openai.Client
-	modelID openai.ChatModel
+	modelID ChatModel
 }
 
 func APIKeyFromEnv() string {
@@ -44,7 +44,7 @@ func APIKeyFromEnv() string {
 
 func NewModel(modelID ChatModel, apiKey string) Model {
 	client := openai.NewClient(option.WithAPIKey(apiKey))
-	return Model{client: &client, modelID: modelID.ToOpenAI()}
+	return Model{client: &client, modelID: modelID}
 }
 
 func (m *Model) ask(history []lingograph.Message) (string, error) {
@@ -61,7 +61,7 @@ func (m *Model) ask(history []lingograph.Message) (string, error) {
 	}
 
 	response, err := m.client.Chat.Completions.New(context.Background(), openai.ChatCompletionNewParams{
-		Model:    m.modelID,
+		Model:    m.modelID.ToOpenAI(),
 		Messages: messages,
 	})
 	if err != nil {
