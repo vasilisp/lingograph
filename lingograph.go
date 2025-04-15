@@ -214,3 +214,23 @@ func (p parallel) Execute(chat Chat) error {
 
 	return nil
 }
+
+type loop struct {
+	pipeline Pipeline
+	limit    int
+}
+
+func (l loop) Execute(chat Chat) error {
+	for i := 0; l.limit < 0 || i < l.limit; i++ {
+		err := l.pipeline.Execute(chat)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func NewLoop(pipeline Pipeline, limit int) Pipeline {
+	return loop{pipeline: pipeline, limit: limit}
+}
