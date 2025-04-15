@@ -84,6 +84,7 @@ type ProgrammaticActor struct {
 	actorID actorID
 	roleID  Role
 	fn      func(history []Message) (string, error)
+	echo    func(Message)
 }
 
 func (a ProgrammaticActor) Execute(chat Chat) error {
@@ -92,18 +93,27 @@ func (a ProgrammaticActor) Execute(chat Chat) error {
 		return err
 	}
 
-	chat.write(Message{Role: a.roleID, Content: content})
+	message := Message{Role: a.roleID, Content: content}
+
+	if a.echo != nil {
+		a.echo(message)
+	}
+
+	chat.write(message)
 
 	return nil
 }
 
-func NewProgrammaticActor(role Role, fn func(history []Message) (string, error)) Pipeline {
+func NewProgrammaticActor(role Role, fn func(history []Message) (string, error), echo func(Message)) Pipeline {
+	util.Assert(fn != nil, "NewProgrammaticActor nil fn")
+
 	id := atomic.AddUint64(&nextActorID, 1)
 
 	return ProgrammaticActor{
 		actorID: actorID(id),
 		roleID:  role,
 		fn:      fn,
+		echo:    echo,
 	}
 }
 
