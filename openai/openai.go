@@ -2,7 +2,9 @@ package openai
 
 import (
 	"context"
+	"math"
 	"os"
+	"time"
 
 	"github.com/openai/openai-go"
 	"github.com/openai/openai-go/option"
@@ -70,11 +72,31 @@ func (m *Model) ask(history []lingograph.Message) (string, error) {
 	return response.Choices[0].Message.Content, nil
 }
 
-func NewOpenAIActor(model Model) lingograph.Actor {
+func (m *Model) askWithRetry(history []lingograph.Message, limit int) (string, error) {
+	var err error
+
+	for i := range limit {
+		result, err := m.ask(history)
+
+		if err == nil {
+			return result, nil
+		}
+
+		if i < limit-1 {
+			backoff := time.Duration(math.Pow(2, float64(i))) * time.Second
+			util.Log.Printf("OpenAI error, will retry in %v: %v", backoff, err)
+			time.Sleep(backoff)
+		}
+	}
+
+	return "", err
+}
+
+func NewOpenAIActor(model Model, retryLimit int) lingograph.Actor {
 	return lingograph.NewProgrammaticActor(
 		lingograph.Assistant,
 		func(history []lingograph.Message) (string, error) {
-			result, err := model.ask(history)
+			result, err := model.askWithRetry(history, 3)
 			if err != nil {
 				return "", err
 			}

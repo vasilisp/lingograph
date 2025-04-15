@@ -3,6 +3,8 @@ package lingograph
 import (
 	"sync"
 	"sync/atomic"
+
+	"github.com/vasilisp/lingograph/internal/util"
 )
 
 type Role uint8
@@ -123,21 +125,23 @@ func NewProgrammaticActor(role Role, fn func(history []Message) (string, error))
 }
 
 type Pipeline interface {
-	Execute(chat Chat)
+	Execute(chat Chat) error
 }
 
 type chain struct {
 	links []chainLink
 }
 
-func (c chain) Execute(chat Chat) {
+func (c chain) Execute(chat Chat) error {
 	for _, link := range c.links {
 		message, err := link(chat.History())
 		if err != nil {
-			panic(err)
+			return err
 		}
 		chat.write(message)
 	}
+
+	return nil
 }
 
 func NewChain(actor1, actor2 Actor, actors ...Actor) Pipeline {
@@ -177,7 +181,7 @@ func NewParallel(link1, link2 chainLink, links ...chainLink) Pipeline {
 	return parallel{links: append([]chainLink{link1, link2}, links...)}
 }
 
-func (p parallel) Execute(chat Chat) {
+func (p parallel) Execute(chat Chat) error {
 	splitters := make([]chatSplitter, len(p.links))
 	for i := range p.links {
 		splitters[i] = split(chat)
@@ -186,11 +190,17 @@ func (p parallel) Execute(chat Chat) {
 	wg := sync.WaitGroup{}
 	wg.Add(len(p.links))
 
+	var mu sync.Mutex
+	var errors []error
+
 	fn := func(i int) {
 		splitter := splitters[i]
 		message, err := p.links[i](splitter.history())
 		if err != nil {
-			panic(err)
+			mu.Lock()
+			errors = append(errors, err)
+			mu.Unlock()
+			return
 		}
 		splitter.write(message)
 		wg.Done()
@@ -202,9 +212,19 @@ func (p parallel) Execute(chat Chat) {
 
 	wg.Wait()
 
+	if len(errors) > 0 {
+		for _, err := range errors {
+			util.Log.Printf("error executing pipeline: %v", err)
+		}
+
+		return errors[0]
+	}
+
 	for _, splitter := range splitters {
 		for _, message := range splitter.newMessages {
 			chat.write(message)
 		}
 	}
+
+	return nil
 }

@@ -15,7 +15,7 @@ func main() {
 	user := lingograph.NewUserPrompt("Remind me what date it is today.")
 
 	gptModel := openai.NewModel(openai.GPT4oMini, openai.APIKeyFromEnv())
-	llm := openai.NewOpenAIActor(gptModel)
+	llm := openai.NewOpenAIActor(gptModel, 3)
 
 	chain := lingograph.NewChain(system, user, llm)
 
