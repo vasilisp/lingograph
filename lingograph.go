@@ -185,19 +185,19 @@ func Chain(pipelines ...Pipeline) Pipeline {
 }
 
 type chatSplitter struct {
-	oldMessages []Message
-	newMessages []Message
+	messages             []Message
+	offsetUniqueMessages int
 }
 
 func split(chat Chat, nr int) []*chatSplitter {
 	splitters := make([]*chatSplitter, nr)
-	oldMessages := make([]Message, len(chat.History()))
-	copy(oldMessages, chat.History())
 
 	for i := range splitters {
+		messages := make([]Message, len(chat.History()))
+		copy(messages, chat.History())
 		splitters[i] = &chatSplitter{
-			oldMessages: oldMessages,
-			newMessages: make([]Message, 0),
+			messages:             messages,
+			offsetUniqueMessages: len(messages),
 		}
 	}
 
@@ -205,16 +205,20 @@ func split(chat Chat, nr int) []*chatSplitter {
 }
 
 func (c *chatSplitter) History() []Message {
-	return c.oldMessages
+	return c.messages
 }
 
 func (c *chatSplitter) write(message Message) {
-	c.newMessages = append(c.newMessages, message)
+	c.messages = append(c.messages, message)
 }
 
 func (c *chatSplitter) trim() {
-	c.oldMessages = make([]Message, 0)
-	c.newMessages = make([]Message, 0)
+	c.messages = make([]Message, 0)
+	c.offsetUniqueMessages = 0
+}
+
+func (c *chatSplitter) uniqueMessages() []Message {
+	return c.messages[c.offsetUniqueMessages:]
 }
 
 type parallel struct {
@@ -279,7 +283,7 @@ func (p parallel) Execute(chat Chat) error {
 
 	for i := range p.pipelines {
 		splitter := splitters[i]
-		for _, message := range splitter.newMessages {
+		for _, message := range splitter.uniqueMessages() {
 			chat.write(message)
 		}
 	}
