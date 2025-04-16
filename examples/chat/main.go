@@ -18,7 +18,7 @@ func StdinActor() lingograph.Pipeline {
 			return "", err
 		}
 		return strings.TrimSpace(text), nil
-	}, nil)
+	}, nil, false)
 }
 
 func main() {
@@ -28,7 +28,7 @@ func main() {
 	echo := func(message lingograph.Message) {
 		fmt.Println(message.Content)
 	}
-	llm := openai.NewOpenAIActor(gptModel, echo, 3)
+	llm := openai.NewOpenAIActor(gptModel, echo, 3, false)
 
 	pipeline := lingograph.NewChain(
 		lingograph.NewSystemPrompt("You are a helpful assistant."),

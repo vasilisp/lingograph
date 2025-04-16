@@ -26,6 +26,7 @@ type Message struct {
 type Chat interface {
 	History() []Message
 	write(message Message)
+	trim()
 }
 
 type SliceChat struct {
@@ -38,6 +39,10 @@ func (c *SliceChat) History() []Message {
 
 func (c *SliceChat) write(message Message) {
 	c.history = append(c.history, message)
+}
+
+func (c *SliceChat) trim() {
+	c.history = make([]Message, 0)
 }
 
 func NewSliceChat() Chat {
@@ -53,29 +58,40 @@ var nextActorID uint64 = 2
 
 type Pipeline interface {
 	Execute(chat Chat) error
+	trims() bool
 }
 
 type staticActor struct {
 	actorID actorID
 	roleID  Role
 	message string
+	trim    bool
 }
 
 func (a staticActor) Execute(chat Chat) error {
+	if a.trim {
+		chat.trim()
+	}
+
 	chat.write(Message{Role: a.roleID, Content: a.message})
+
 	return nil
 }
 
-func newStaticActor(actorID actorID, role Role, message string) Pipeline {
-	return staticActor{actorID: actorID, roleID: role, message: message}
+func (a staticActor) trims() bool {
+	return a.trim
+}
+
+func newStaticActor(actorID actorID, role Role, message string, trim bool) Pipeline {
+	return staticActor{actorID: actorID, roleID: role, message: message, trim: trim}
 }
 
 func NewSystemPrompt(message string) Pipeline {
-	return newStaticActor(systemActorID, System, message)
+	return newStaticActor(systemActorID, System, message, false)
 }
 
 func NewUserPrompt(message string) Pipeline {
-	return newStaticActor(userActorID, User, message)
+	return newStaticActor(userActorID, User, message, false)
 }
 
 type ProgrammaticActor struct {
@@ -83,12 +99,17 @@ type ProgrammaticActor struct {
 	roleID  Role
 	fn      func(history []Message) (string, error)
 	echo    func(Message)
+	trim    bool
 }
 
 func (a ProgrammaticActor) Execute(chat Chat) error {
 	content, err := a.fn(chat.History())
 	if err != nil {
 		return err
+	}
+
+	if a.trim {
+		chat.trim()
 	}
 
 	message := Message{Role: a.roleID, Content: content}
@@ -102,7 +123,11 @@ func (a ProgrammaticActor) Execute(chat Chat) error {
 	return nil
 }
 
-func NewProgrammaticActor(role Role, fn func(history []Message) (string, error), echo func(Message)) Pipeline {
+func (a ProgrammaticActor) trims() bool {
+	return a.trim
+}
+
+func NewProgrammaticActor(role Role, fn func(history []Message) (string, error), echo func(Message), trim bool) Pipeline {
 	util.Assert(fn != nil, "NewProgrammaticActor nil fn")
 
 	id := atomic.AddUint64(&nextActorID, 1)
@@ -112,6 +137,7 @@ func NewProgrammaticActor(role Role, fn func(history []Message) (string, error),
 		roleID:  role,
 		fn:      fn,
 		echo:    echo,
+		trim:    trim,
 	}
 }
 
@@ -128,6 +154,16 @@ func (c chain) Execute(chat Chat) error {
 	}
 
 	return nil
+}
+
+func (c chain) trims() bool {
+	for _, link := range c.links {
+		if link.trims() {
+			return true
+		}
+	}
+
+	return false
 }
 
 func NewChain(pipeline1, pipeline2 Pipeline, pipelines ...Pipeline) Pipeline {
@@ -161,6 +197,11 @@ func (c *chatSplitter) write(message Message) {
 	c.newMessages = append(c.newMessages, message)
 }
 
+func (c *chatSplitter) trim() {
+	c.oldMessages = make([]Message, 0)
+	c.newMessages = make([]Message, 0)
+}
+
 type parallel struct {
 	links []Pipeline
 }
@@ -174,6 +215,15 @@ func NewParallel(pipeline1, pipeline2 Pipeline, pipelines ...Pipeline) Pipeline 
 	}
 
 	return parallel{links: links}
+}
+
+func (p parallel) trims() bool {
+	for _, link := range p.links {
+		if !link.trims() {
+			return false
+		}
+	}
+	return true
 }
 
 func (p parallel) Execute(chat Chat) error {
@@ -214,7 +264,12 @@ func (p parallel) Execute(chat Chat) error {
 		return errors[0]
 	}
 
-	for _, splitter := range splitters {
+	if p.trims() {
+		chat.trim()
+	}
+
+	for link := range p.links {
+		splitter := splitters[link]
 		for _, message := range splitter.newMessages {
 			chat.write(message)
 		}
@@ -237,6 +292,10 @@ func (l loop) Execute(chat Chat) error {
 	}
 
 	return nil
+}
+
+func (l loop) trims() bool {
+	return l.pipeline.trims()
 }
 
 func NewLoop(pipeline Pipeline, limit int) Pipeline {

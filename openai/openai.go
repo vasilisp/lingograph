@@ -92,7 +92,7 @@ func (m *Model) askWithRetry(history []lingograph.Message, limit int) (string, e
 	return "", err
 }
 
-func NewOpenAIActor(model Model, echo func(lingograph.Message), retryLimit int) lingograph.Pipeline {
+func NewOpenAIActor(model Model, echo func(lingograph.Message), retryLimit int, trim bool) lingograph.Pipeline {
 	return lingograph.NewProgrammaticActor(
 		lingograph.Assistant,
 		func(history []lingograph.Message) (string, error) {
@@ -103,5 +103,6 @@ func NewOpenAIActor(model Model, echo func(lingograph.Message), retryLimit int) 
 			return result, nil
 		},
 		echo,
+		trim,
 	)
 }
