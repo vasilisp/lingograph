@@ -182,11 +182,19 @@ type chatSplitter struct {
 	newMessages []Message
 }
 
-func split(chat Chat) *chatSplitter {
-	return &chatSplitter{
-		oldMessages: chat.History(),
-		newMessages: make([]Message, 0),
+func split(chat Chat, nr int) []*chatSplitter {
+	splitters := make([]*chatSplitter, nr)
+	oldMessages := make([]Message, len(chat.History()))
+	copy(oldMessages, chat.History())
+
+	for i := range splitters {
+		splitters[i] = &chatSplitter{
+			oldMessages: oldMessages,
+			newMessages: make([]Message, 0),
+		}
 	}
+
+	return splitters
 }
 
 func (c *chatSplitter) History() []Message {
@@ -227,10 +235,7 @@ func (p parallel) trims() bool {
 }
 
 func (p parallel) Execute(chat Chat) error {
-	splitters := make([]*chatSplitter, len(p.links))
-	for i := range p.links {
-		splitters[i] = split(chat)
-	}
+	splitters := split(chat, len(p.links))
 
 	wg := sync.WaitGroup{}
 	wg.Add(len(p.links))
