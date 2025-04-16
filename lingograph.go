@@ -10,8 +10,7 @@ import (
 type Role uint8
 
 const (
-	System Role = iota
-	User
+	User Role = iota
 	Assistant
 )
 
@@ -49,12 +48,9 @@ func NewSliceChat() Chat {
 	return &SliceChat{history: make([]Message, 0)}
 }
 
-const (
-	systemActorID actorID = 0
-	userActorID   actorID = 1
-)
+const userActorID actorID = 0
 
-var nextActorID uint64 = 2
+var nextActorID uint64 = 1
 
 type Pipeline interface {
 	Execute(chat Chat) error

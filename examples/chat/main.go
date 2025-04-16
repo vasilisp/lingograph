@@ -25,19 +25,16 @@ func main() {
 	chat := lingograph.NewSliceChat()
 
 	stdinActor := stdinActor()
-	openAIActor := openai.NewModel(openai.GPT4oMini, openai.APIKeyFromEnv()).Actor(3)
+	openAIActor := openai.NewModel(openai.GPT4oMini, openai.APIKeyFromEnv()).Actor("You are a helpful assistant.", 3)
 
-	pipeline := lingograph.NewChain(
-		lingograph.NewUserPrompt("You are a helpful assistant.", false),
-		lingograph.NewLoop(
-			lingograph.NewChain(
-				stdinActor.Pipeline(nil, false),
-				openAIActor.Pipeline(func(message lingograph.Message) {
-					fmt.Println(message.Content)
-				}, false),
-			),
-			10,
+	pipeline := lingograph.NewLoop(
+		lingograph.NewChain(
+			stdinActor.Pipeline(nil, false),
+			openAIActor.Pipeline(func(message lingograph.Message) {
+				fmt.Println(message.Content)
+			}, false),
 		),
+		10,
 	)
 
 	pipeline.Execute(chat)

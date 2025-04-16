@@ -47,16 +47,23 @@ func NewModel(modelID ChatModel, apiKey string) Model {
 	return Model{client: &client, modelID: modelID}
 }
 
-func (m *Model) ask(history []lingograph.Message) (string, error) {
-	messages := make([]openai.ChatCompletionMessageParamUnion, len(history))
-	for i, msg := range history {
+func (m *Model) ask(systemPrompt string, history []lingograph.Message) (string, error) {
+	length := len(history)
+	if systemPrompt != "" {
+		length++
+	}
+	messages := make([]openai.ChatCompletionMessageParamUnion, 0, length)
+
+	if systemPrompt != "" {
+		messages = append(messages, openai.SystemMessage(systemPrompt))
+	}
+
+	for _, msg := range history {
 		switch msg.Role {
-		case lingograph.System:
-			messages[i] = openai.SystemMessage(msg.Content)
 		case lingograph.Assistant:
-			messages[i] = openai.AssistantMessage(msg.Content)
+			messages = append(messages, openai.AssistantMessage(msg.Content))
 		default:
-			messages[i] = openai.UserMessage(msg.Content)
+			messages = append(messages, openai.UserMessage(msg.Content))
 		}
 	}
 
@@ -72,11 +79,11 @@ func (m *Model) ask(history []lingograph.Message) (string, error) {
 	return response.Choices[0].Message.Content, nil
 }
 
-func (m *Model) askWithRetry(history []lingograph.Message, limit int) (string, error) {
+func (m *Model) askWithRetry(systemPrompt string, history []lingograph.Message, limit int) (string, error) {
 	var err error
 
 	for i := range limit {
-		result, err := m.ask(history)
+		result, err := m.ask(systemPrompt, history)
 
 		if err == nil {
 			return result, nil
@@ -92,11 +99,11 @@ func (m *Model) askWithRetry(history []lingograph.Message, limit int) (string, e
 	return "", err
 }
 
-func (m Model) Actor(retryLimit int) lingograph.Actor {
+func (m Model) Actor(systemPrompt string, retryLimit int) lingograph.Actor {
 	return lingograph.NewActor(
 		lingograph.Assistant,
 		func(history []lingograph.Message) (string, error) {
-			result, err := m.askWithRetry(history, retryLimit)
+			result, err := m.askWithRetry(systemPrompt, history, retryLimit)
 			if err != nil {
 				return "", err
 			}
