@@ -10,32 +10,31 @@ import (
 	"github.com/vasilisp/lingograph/openai"
 )
 
-func StdinActor() lingograph.Pipeline {
-	return lingograph.NewProgrammaticActor(lingograph.User, func(history []lingograph.Message) (string, error) {
+func stdinActor() lingograph.Actor {
+	return lingograph.NewActor(lingograph.User, func(history []lingograph.Message) (string, error) {
 		reader := bufio.NewReader(os.Stdin)
 		text, err := reader.ReadString('\n')
 		if err != nil {
 			return "", err
 		}
 		return strings.TrimSpace(text), nil
-	}, nil, false)
+	})
 }
 
 func main() {
 	chat := lingograph.NewSliceChat()
 
-	gptModel := openai.NewModel(openai.GPT4oMini, openai.APIKeyFromEnv())
-	echo := func(message lingograph.Message) {
-		fmt.Println(message.Content)
-	}
-	llm := openai.NewOpenAIActor(gptModel, echo, 3, false)
+	stdinActor := stdinActor()
+	openAIActor := openai.NewModel(openai.GPT4oMini, openai.APIKeyFromEnv()).Actor(3)
 
 	pipeline := lingograph.NewChain(
-		lingograph.NewSystemPrompt("You are a helpful assistant."),
+		lingograph.NewUserPrompt("You are a helpful assistant.", false),
 		lingograph.NewLoop(
 			lingograph.NewChain(
-				StdinActor(),
-				llm,
+				stdinActor.Pipeline(nil, false),
+				openAIActor.Pipeline(func(message lingograph.Message) {
+					fmt.Println(message.Content)
+				}, false),
 			),
 			10,
 		),

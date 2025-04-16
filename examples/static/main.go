@@ -10,12 +10,11 @@ import (
 func main() {
 	chat := lingograph.NewSliceChat()
 
-	gptModel := openai.NewModel(openai.GPT4oMini, openai.APIKeyFromEnv())
+	openAIActor := openai.NewModel(openai.GPT4oMini, openai.APIKeyFromEnv()).Actor(3)
 
 	chain := lingograph.NewChain(
-		lingograph.NewSystemPrompt("You are a helpful assistant."),
-		lingograph.NewUserPrompt("Remind me what date it is today."),
-		openai.NewOpenAIActor(gptModel, nil, 3, true),
+		lingograph.NewUserPrompt("Remind me what date it is today.", false),
+		openAIActor.Pipeline(nil, true),
 	)
 
 	chain.Execute(chat)

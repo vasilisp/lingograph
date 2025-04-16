@@ -61,14 +61,14 @@ type Pipeline interface {
 	trims() bool
 }
 
-type staticActor struct {
+type staticPipeline struct {
 	actorID actorID
 	roleID  Role
 	message string
 	trim    bool
 }
 
-func (a staticActor) Execute(chat Chat) error {
+func (a *staticPipeline) Execute(chat Chat) error {
 	if a.trim {
 		chat.trim()
 	}
@@ -78,31 +78,47 @@ func (a staticActor) Execute(chat Chat) error {
 	return nil
 }
 
-func (a staticActor) trims() bool {
+func (a *staticPipeline) trims() bool {
 	return a.trim
 }
 
-func newStaticActor(actorID actorID, role Role, message string, trim bool) Pipeline {
-	return staticActor{actorID: actorID, roleID: role, message: message, trim: trim}
+func NewUserPrompt(message string, trim bool) Pipeline {
+	return &staticPipeline{actorID: userActorID, roleID: User, message: message, trim: trim}
 }
 
-func NewSystemPrompt(message string) Pipeline {
-	return newStaticActor(systemActorID, System, message, false)
-}
-
-func NewUserPrompt(message string) Pipeline {
-	return newStaticActor(userActorID, User, message, false)
-}
-
-type ProgrammaticActor struct {
+type Actor struct {
 	actorID actorID
 	roleID  Role
 	fn      func(history []Message) (string, error)
-	echo    func(Message)
-	trim    bool
 }
 
-func (a ProgrammaticActor) Execute(chat Chat) error {
+func NewActor(role Role, fn func(history []Message) (string, error)) Actor {
+	util.Assert(fn != nil, "NewProgrammaticActor nil fn")
+
+	id := atomic.AddUint64(&nextActorID, 1)
+
+	return Actor{
+		actorID: actorID(id),
+		roleID:  role,
+		fn:      fn,
+	}
+}
+
+type ActorPipeline struct {
+	Actor
+	echo func(Message)
+	trim bool
+}
+
+func (a Actor) Pipeline(echo func(Message), trim bool) Pipeline {
+	return &ActorPipeline{
+		Actor: a,
+		echo:  echo,
+		trim:  trim,
+	}
+}
+
+func (a *ActorPipeline) Execute(chat Chat) error {
 	content, err := a.fn(chat.History())
 	if err != nil {
 		return err
@@ -123,22 +139,8 @@ func (a ProgrammaticActor) Execute(chat Chat) error {
 	return nil
 }
 
-func (a ProgrammaticActor) trims() bool {
+func (a *ActorPipeline) trims() bool {
 	return a.trim
-}
-
-func NewProgrammaticActor(role Role, fn func(history []Message) (string, error), echo func(Message), trim bool) Pipeline {
-	util.Assert(fn != nil, "NewProgrammaticActor nil fn")
-
-	id := atomic.AddUint64(&nextActorID, 1)
-
-	return ProgrammaticActor{
-		actorID: actorID(id),
-		roleID:  role,
-		fn:      fn,
-		echo:    echo,
-		trim:    trim,
-	}
 }
 
 type chain struct {
