@@ -1,8 +1,10 @@
 package lingograph
 
 import (
+	"math"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/vasilisp/lingograph/internal/util"
 )
@@ -102,22 +104,35 @@ func NewActor(role Role, fn func(history []Message) (string, error)) Actor {
 
 type ActorPipeline struct {
 	Actor
-	echo func(Message)
-	trim bool
+	echo       func(Message)
+	trim       bool
+	retryLimit int
 }
 
-func (a Actor) Pipeline(echo func(Message), trim bool) Pipeline {
+func (a Actor) Pipeline(echo func(Message), trim bool, retryLimit int) Pipeline {
 	return &ActorPipeline{
-		Actor: a,
-		echo:  echo,
-		trim:  trim,
+		Actor:      a,
+		echo:       echo,
+		trim:       trim,
+		retryLimit: retryLimit,
 	}
 }
 
 func (a *ActorPipeline) Execute(chat Chat) error {
-	content, err := a.fn(chat.History())
-	if err != nil {
-		return err
+	history := chat.History()
+
+	var err error
+	var content string
+
+	for i := range max(1, a.retryLimit) {
+		// FIXME: fn can theoretically modify history
+		content, err = a.fn(history)
+		if err == nil {
+			break
+		}
+		backoff := time.Duration(math.Pow(2, float64(i))) * time.Second
+		util.Log.Printf("error executing pipeline: %v", err)
+		time.Sleep(backoff)
 	}
 
 	if a.trim {
