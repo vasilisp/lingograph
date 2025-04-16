@@ -44,8 +44,6 @@ func NewSliceChat() Chat {
 	return &SliceChat{history: make([]Message, 0)}
 }
 
-type chainLink func(history []Message) (Message, error)
-
 const (
 	systemActorID actorID = 0
 	userActorID   actorID = 1
