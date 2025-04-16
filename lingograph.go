@@ -130,6 +130,7 @@ func (a *ActorPipeline) Execute(chat Chat) error {
 		if err == nil {
 			break
 		}
+
 		backoff := time.Duration(math.Pow(2, float64(i))) * time.Second
 		util.Log.Printf("error executing pipeline: %v", err)
 		time.Sleep(backoff)
@@ -155,12 +156,12 @@ func (a *ActorPipeline) trims() bool {
 }
 
 type chain struct {
-	links []Pipeline
+	pipelines []Pipeline
 }
 
 func (c chain) Execute(chat Chat) error {
-	for _, link := range c.links {
-		err := link.Execute(chat)
+	for _, pipeline := range c.pipelines {
+		err := pipeline.Execute(chat)
 		if err != nil {
 			return err
 		}
@@ -170,8 +171,8 @@ func (c chain) Execute(chat Chat) error {
 }
 
 func (c chain) trims() bool {
-	for _, link := range c.links {
-		if link.trims() {
+	for _, pipeline := range c.pipelines {
+		if pipeline.trims() {
 			return true
 		}
 	}
@@ -179,15 +180,8 @@ func (c chain) trims() bool {
 	return false
 }
 
-func Chain(pipeline1, pipeline2 Pipeline, pipelines ...Pipeline) Pipeline {
-	links := make([]Pipeline, 0, len(pipelines)+2)
-
-	links = append(links, pipeline1, pipeline2)
-	for _, pipeline := range pipelines {
-		links = append(links, pipeline)
-	}
-
-	return chain{links: links}
+func Chain(pipelines ...Pipeline) Pipeline {
+	return chain{pipelines: pipelines}
 }
 
 type chatSplitter struct {
@@ -224,23 +218,16 @@ func (c *chatSplitter) trim() {
 }
 
 type parallel struct {
-	links []Pipeline
+	pipelines []Pipeline
 }
 
-func Parallel(pipeline1, pipeline2 Pipeline, pipelines ...Pipeline) Pipeline {
-	links := make([]Pipeline, 0, len(pipelines)+2)
-
-	links = append(links, pipeline1, pipeline2)
-	for _, pipeline := range pipelines {
-		links = append(links, pipeline)
-	}
-
-	return parallel{links: links}
+func Parallel(pipelines ...Pipeline) Pipeline {
+	return parallel{pipelines: pipelines}
 }
 
 func (p parallel) trims() bool {
-	for _, link := range p.links {
-		if !link.trims() {
+	for _, pipeline := range p.pipelines {
+		if !pipeline.trims() {
 			return false
 		}
 	}
@@ -248,17 +235,21 @@ func (p parallel) trims() bool {
 }
 
 func (p parallel) Execute(chat Chat) error {
-	splitters := split(chat, len(p.links))
+	if len(p.pipelines) == 0 {
+		return nil
+	}
+
+	splitters := split(chat, len(p.pipelines))
 
 	wg := sync.WaitGroup{}
-	wg.Add(len(p.links))
+	wg.Add(len(p.pipelines))
 
 	var mu sync.Mutex
 	var errors []error
 
 	fn := func(i int) {
 		splitter := splitters[i]
-		err := p.links[i].Execute(splitter)
+		err := p.pipelines[i].Execute(splitter)
 		if err != nil {
 			mu.Lock()
 			errors = append(errors, err)
@@ -268,7 +259,7 @@ func (p parallel) Execute(chat Chat) error {
 		wg.Done()
 	}
 
-	for i := range p.links {
+	for i := range p.pipelines {
 		go fn(i)
 	}
 
@@ -286,8 +277,8 @@ func (p parallel) Execute(chat Chat) error {
 		chat.trim()
 	}
 
-	for link := range p.links {
-		splitter := splitters[link]
+	for i := range p.pipelines {
+		splitter := splitters[i]
 		for _, message := range splitter.newMessages {
 			chat.write(message)
 		}
