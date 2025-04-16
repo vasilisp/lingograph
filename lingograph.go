@@ -146,18 +146,18 @@ type chatSplitter struct {
 	newMessages []Message
 }
 
-func split(chat Chat) chatSplitter {
-	return chatSplitter{
+func split(chat Chat) *chatSplitter {
+	return &chatSplitter{
 		oldMessages: chat.History(),
 		newMessages: make([]Message, 0),
 	}
 }
 
-func (c chatSplitter) History() []Message {
+func (c *chatSplitter) History() []Message {
 	return c.oldMessages
 }
 
-func (c chatSplitter) write(message Message) {
+func (c *chatSplitter) write(message Message) {
 	c.newMessages = append(c.newMessages, message)
 }
 
@@ -177,7 +177,7 @@ func NewParallel(pipeline1, pipeline2 Pipeline, pipelines ...Pipeline) Pipeline 
 }
 
 func (p parallel) Execute(chat Chat) error {
-	splitters := make([]chatSplitter, len(p.links))
+	splitters := make([]*chatSplitter, len(p.links))
 	for i := range p.links {
 		splitters[i] = split(chat)
 	}
