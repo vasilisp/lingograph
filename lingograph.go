@@ -80,7 +80,7 @@ func (a *staticPipeline) trims() bool {
 	return a.trim
 }
 
-func NewUserPrompt(message string, trim bool) Pipeline {
+func UserPrompt(message string, trim bool) Pipeline {
 	return &staticPipeline{actorID: userActorID, roleID: User, message: message, trim: trim}
 }
 
@@ -179,7 +179,7 @@ func (c chain) trims() bool {
 	return false
 }
 
-func NewChain(pipeline1, pipeline2 Pipeline, pipelines ...Pipeline) Pipeline {
+func Chain(pipeline1, pipeline2 Pipeline, pipelines ...Pipeline) Pipeline {
 	links := make([]Pipeline, 0, len(pipelines)+2)
 
 	links = append(links, pipeline1, pipeline2)
@@ -227,7 +227,7 @@ type parallel struct {
 	links []Pipeline
 }
 
-func NewParallel(pipeline1, pipeline2 Pipeline, pipelines ...Pipeline) Pipeline {
+func Parallel(pipeline1, pipeline2 Pipeline, pipelines ...Pipeline) Pipeline {
 	links := make([]Pipeline, 0, len(pipelines)+2)
 
 	links = append(links, pipeline1, pipeline2)
@@ -316,6 +316,6 @@ func (l loop) trims() bool {
 	return l.pipeline.trims()
 }
 
-func NewLoop(pipeline Pipeline, limit int) Pipeline {
+func Loop(pipeline Pipeline, limit int) Pipeline {
 	return loop{pipeline: pipeline, limit: limit}
 }

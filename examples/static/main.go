@@ -12,8 +12,8 @@ func main() {
 
 	openAIActor := openai.NewModel(openai.GPT4oMini, openai.APIKeyFromEnv()).Actor("You are a helpful assistant.")
 
-	chain := lingograph.NewChain(
-		lingograph.NewUserPrompt("Remind me what date it is today.", false),
+	chain := lingograph.Chain(
+		lingograph.UserPrompt("Remind me what date it is today.", false),
 		openAIActor.Pipeline(nil, true, 3),
 	)
 

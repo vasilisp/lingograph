@@ -27,8 +27,8 @@ func main() {
 	stdinActor := stdinActor()
 	openAIActor := openai.NewModel(openai.GPT4oMini, openai.APIKeyFromEnv()).Actor("You are a helpful assistant.")
 
-	pipeline := lingograph.NewLoop(
-		lingograph.NewChain(
+	pipeline := lingograph.Loop(
+		lingograph.Chain(
 			stdinActor.Pipeline(nil, false, 0),
 			openAIActor.Pipeline(func(message lingograph.Message) {
 				fmt.Println(message.Content)
