@@ -25,7 +25,8 @@ func main() {
 	chat := lingograph.NewSliceChat()
 
 	stdinActor := stdinActor()
-	openAIActor := openai.NewModel(openai.GPT4oMini, openai.APIKeyFromEnv()).Actor("You are a helpful assistant.")
+	openAIModel := openai.NewModel(openai.GPT4oMini, openai.APIKeyFromEnv())
+	openAIActor := openai.NewActor(openAIModel, "You are a helpful assistant.")
 
 	pipeline := lingograph.Loop(
 		lingograph.Chain(
