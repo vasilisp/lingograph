@@ -23,7 +23,7 @@ reflection to minimize boilerplate.
 
 ### Pipeline
 
-A **Pipeline** represents the overall structure for processing history and
+A **pipeline** represents the overall structure for processing history and
 generating responses. Pipelines are built from actors and composed using
 combinators:
 
@@ -40,5 +40,5 @@ directory:
 go get github.com/vasilisp/lingograph
 ```
 
-Then explore the [`examples`](./examples) directory to see how the core concepts
+Then explore the [`examples`](https://github.com/vasilisp/lingograph/tree/main/examples) directory to see how the core concepts
 fit together.
