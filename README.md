@@ -1,7 +1,7 @@
 # lingograph
 
-`lingograph` is a Go library for building conversational pipelines. It provides
-a flexible, composable way to create complex conversation flows using pipeline
+`lingograph` is a Go library for building LLM pipelines. It provides a
+flexible, composable way to create complex conversation flows using pipeline
 combinators.
 
 ## Core Concepts
@@ -13,7 +13,7 @@ combinators.
 An **actor** is a component that processes conversation history and generates
 responses. Actors can be:
 
-- OpenAI-powered agents with system prompts
+- OpenAI LLM invocations with system prompts
 - Custom implementations with specialized behavior
 
 OpenAI-based actors can seamlessly invoke Go functions. These functions receive
