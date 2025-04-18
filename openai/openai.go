@@ -124,15 +124,15 @@ func (m *Model) ask(systemPrompt string, history []lingograph.Message, functions
 	return response.Choices[0].Message.Content, nil
 }
 
-type actor struct {
+type Actor struct {
 	lingoActor lingograph.Actor
 	functions  map[string]Function
 }
 
-func NewActor(model Model, systemPrompt string) actor {
+func NewActor(model Model, systemPrompt string) Actor {
 	functions := make(map[string]Function)
 
-	actor := actor{functions: functions}
+	actor := Actor{functions: functions}
 
 	actor.lingoActor = lingograph.NewActor(
 		lingograph.Assistant,
@@ -144,7 +144,7 @@ func NewActor(model Model, systemPrompt string) actor {
 	return actor
 }
 
-func (a actor) addFunction(fn Function) {
+func (a Actor) addFunction(fn Function) {
 	a.functions[fn.name] = fn
 }
 
@@ -286,7 +286,7 @@ func ToOpenAISchema(s *jsonschema.Schema) (map[string]any, error) {
 	return out, nil
 }
 
-func AddFunction[I, O any](a actor, name string, description string, fn func(I) (O, error)) {
+func AddFunction[I, O any](a Actor, name string, description string, fn func(I) (O, error)) {
 	var zero I
 	reflector := &jsonschema.Reflector{}
 	schema := reflector.Reflect(&zero)
@@ -332,10 +332,10 @@ func AddFunction[I, O any](a actor, name string, description string, fn func(I) 
 	})
 }
 
-func (a actor) LingographActor() lingograph.Actor {
+func (a Actor) LingographActor() lingograph.Actor {
 	return a.lingoActor
 }
 
-func (a actor) Pipeline(echo func(lingograph.Message), trim bool, retryLimit int) lingograph.Pipeline {
+func (a Actor) Pipeline(echo func(lingograph.Message), trim bool, retryLimit int) lingograph.Pipeline {
 	return a.lingoActor.Pipeline(echo, trim, retryLimit)
 }
