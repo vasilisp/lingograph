@@ -13,10 +13,12 @@ import (
 func stdinActor() lingograph.Actor {
 	return lingograph.NewActor(lingograph.User, func(history []lingograph.Message) (string, error) {
 		reader := bufio.NewReader(os.Stdin)
+
 		text, err := reader.ReadString('\n')
 		if err != nil {
 			return "", err
 		}
+
 		return strings.TrimSpace(text), nil
 	})
 }

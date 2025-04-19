@@ -56,18 +56,19 @@ func NewModel(modelID ChatModel, apiKey string) Model {
 type Function struct {
 	name string
 	def  openai.FunctionDefinitionParam
-	fn   func(string) (string, error)
+	fn   func(string) ([]lingograph.Message, error)
 }
 
-func call(functions map[string]Function, name, args string) (string, error) {
+func call(functions map[string]Function, name, args string) ([]lingograph.Message, error) {
 	fn, ok := functions[name]
 	if !ok {
-		return "", fmt.Errorf("function not found")
+		return nil, fmt.Errorf("function not found")
 	}
+
 	return fn.fn(args)
 }
 
-func (m *Model) ask(systemPrompt string, history []lingograph.Message, functions map[string]Function) (string, error) {
+func (m *Model) ask(systemPrompt string, history []lingograph.Message, functions map[string]Function) ([]lingograph.Message, error) {
 	length := len(history)
 	if systemPrompt != "" {
 		length++
@@ -102,26 +103,31 @@ func (m *Model) ask(systemPrompt string, history []lingograph.Message, functions
 		Tools:    toolParams,
 	})
 	if err != nil {
-		return "", err
+		return nil, err
 	}
+
+	newMessages := make([]lingograph.Message, 0, len(response.Choices))
 
 	for _, choice := range response.Choices {
 		msg := choice.Message
-		if msg.ToolCalls != nil {
+		if msg.ToolCalls != nil && len(msg.ToolCalls) > 0 {
 			for _, toolCall := range msg.ToolCalls {
 				functionName := toolCall.Function.Name
 				arguments := toolCall.Function.Arguments
 				result, err := call(functions, functionName, arguments)
 				if err != nil {
-					return "", fmt.Errorf("error calling function %s: %w", functionName, err)
+					return nil, fmt.Errorf("error calling function %s: %w", functionName, err)
 				}
-				return result, nil
+				// FIXME: these should be tool messages (but a bit complicated to implement)
+				newMessages = append(newMessages, result...)
 			}
+		} else {
+			newMessages = append(newMessages, lingograph.Message{Role: lingograph.Assistant, Content: msg.Content})
 		}
 	}
 
 	util.Assert(len(response.Choices) > 0, "no choices")
-	return response.Choices[0].Message.Content, nil
+	return newMessages, nil
 }
 
 type Actor struct {
@@ -134,9 +140,9 @@ func NewActor(model Model, systemPrompt string) Actor {
 
 	actor := Actor{functions: functions}
 
-	actor.lingoActor = lingograph.NewActor(
+	actor.lingoActor = lingograph.NewActorUnsafe(
 		lingograph.Assistant,
-		func(history []lingograph.Message) (string, error) {
+		func(history []lingograph.Message) ([]lingograph.Message, error) {
 			return model.ask(systemPrompt, history, actor.functions)
 		},
 	)
@@ -286,7 +292,7 @@ func ToOpenAISchema(s *jsonschema.Schema) (map[string]any, error) {
 	return out, nil
 }
 
-func AddFunction[I, O any](a Actor, name string, description string, fn func(I) (O, error)) {
+func AddFunctionUnsafe[I any](a Actor, name string, description string, fn func(I) ([]lingograph.Message, error)) {
 	var zero I
 	reflector := &jsonschema.Reflector{}
 	schema := reflector.Reflect(&zero)
@@ -301,24 +307,14 @@ func AddFunction[I, O any](a Actor, name string, description string, fn func(I) 
 		log.Fatalf("cannot convert schema to OpenAI schema: %s", err)
 	}
 
-	fnWrapped := func(input string) (string, error) {
+	fnWrapped := func(input string) ([]lingograph.Message, error) {
 		var i I
 		err := json.Unmarshal([]byte(input), &i)
 		if err != nil {
-			return "", err
+			return nil, err
 		}
 
-		o, err := fn(i)
-		if err != nil {
-			return "", err
-		}
-
-		json, err := json.Marshal(o)
-		if err != nil {
-			return "", err
-		}
-
-		return string(json), nil
+		return fn(i)
 	}
 
 	a.addFunction(Function{
@@ -330,6 +326,23 @@ func AddFunction[I, O any](a Actor, name string, description string, fn func(I) 
 		},
 		fn: fnWrapped,
 	})
+}
+
+func AddFunction[I any, O any](a Actor, name string, description string, fn func(I) (O, error)) {
+	AddFunctionUnsafe(a, name, description,
+		func(i I) ([]lingograph.Message, error) {
+			o, err := fn(i)
+			if err != nil {
+				return nil, err
+			}
+
+			json, err := json.Marshal(o)
+			if err != nil {
+				return nil, err
+			}
+
+			return []lingograph.Message{{Role: lingograph.Assistant, Content: string(json)}}, nil
+		})
 }
 
 func (a Actor) LingographActor() lingograph.Actor {

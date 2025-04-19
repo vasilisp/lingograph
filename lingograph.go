@@ -87,16 +87,34 @@ func UserPrompt(message string, trim bool) Pipeline {
 type Actor struct {
 	actorID actorID
 	roleID  Role
-	fn      func(history []Message) (string, error)
+	fn      func(history []Message) ([]Message, error)
 }
 
 func NewActor(role Role, fn func(history []Message) (string, error)) Actor {
-	util.Assert(fn != nil, "NewProgrammaticActor nil fn")
+	util.Assert(fn != nil, "NewActor nil fn")
 
-	id := atomic.AddUint64(&nextActorID, 1)
+	fnWrapped := func(history []Message) ([]Message, error) {
+		content, err := fn(history)
+		if err != nil {
+			return nil, err
+		}
+
+		// actorID will be set by the caller
+		return []Message{{Role: role, Content: content}}, nil
+	}
 
 	return Actor{
-		actorID: actorID(id),
+		actorID: actorID(atomic.AddUint64(&nextActorID, 1)),
+		roleID:  role,
+		fn:      fnWrapped,
+	}
+}
+
+func NewActorUnsafe(role Role, fn func(history []Message) ([]Message, error)) Actor {
+	util.Assert(fn != nil, "NewActorUnsafe nil fn")
+
+	return Actor{
+		actorID: actorID(atomic.AddUint64(&nextActorID, 1)),
 		roleID:  role,
 		fn:      fn,
 	}
@@ -122,11 +140,11 @@ func (a *ActorPipeline) Execute(chat Chat) error {
 	history := chat.History()
 
 	var err error
-	var content string
+	var newMessages []Message = nil
 
 	for i := range max(1, a.retryLimit) {
 		// FIXME: fn can theoretically modify history
-		content, err = a.fn(history)
+		newMessages, err = a.fn(history)
 		if err == nil {
 			break
 		}
@@ -140,13 +158,15 @@ func (a *ActorPipeline) Execute(chat Chat) error {
 		chat.trim()
 	}
 
-	message := Message{Role: a.roleID, Content: content}
+	for _, message := range newMessages {
+		if a.echo != nil {
+			a.echo(message)
+		}
 
-	if a.echo != nil {
-		a.echo(message)
+		message.actor = a.actorID
+
+		chat.write(message)
 	}
-
-	chat.write(message)
 
 	return nil
 }
