@@ -14,14 +14,16 @@ type Role uint8
 const (
 	User Role = iota
 	Assistant
+	Function
 )
 
 type actorID uint32
 
 type Message struct {
-	Role    Role
-	Content string
-	actor   actorID
+	Role          Role
+	Content       string
+	actor         actorID
+	ModelMetadata any
 }
 
 type Chat interface {

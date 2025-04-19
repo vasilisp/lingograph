@@ -59,13 +59,30 @@ type Function struct {
 	fn   func(string) ([]lingograph.Message, error)
 }
 
-func call(functions map[string]Function, name, args string) ([]lingograph.Message, error) {
-	fn, ok := functions[name]
+func call(functions map[string]Function, toolCall openai.ChatCompletionMessageToolCall) ([]lingograph.Message, error) {
+	fn, ok := functions[toolCall.Function.Name]
 	if !ok {
 		return nil, fmt.Errorf("function not found")
 	}
 
-	return fn.fn(args)
+	messages, err := fn.fn(toolCall.Function.Arguments)
+	if err != nil {
+		return nil, err
+	}
+
+	messagesWithMetadata := make([]lingograph.Message, 0, len(messages))
+	for _, msg := range messages {
+		if msg.Role == lingograph.Function {
+			msg.ModelMetadata = FunctionCallID{ID: toolCall.ID}
+		}
+		messagesWithMetadata = append(messagesWithMetadata, msg)
+	}
+
+	return messagesWithMetadata, nil
+}
+
+type FunctionCallID struct {
+	ID string
 }
 
 func (m *Model) ask(systemPrompt string, history []lingograph.Message, functions map[string]Function) ([]lingograph.Message, error) {
@@ -79,10 +96,31 @@ func (m *Model) ask(systemPrompt string, history []lingograph.Message, functions
 		messages = append(messages, openai.SystemMessage(systemPrompt))
 	}
 
+	// FIXME: verify that the function IDs in 'assistant' messages match the
+	// ones in 'function' messages. If the history has been trimmed this may not
+	// be the case. Strip off function info and fall back to user messages if
+	// necessary.
+
 	for _, msg := range history {
 		switch msg.Role {
 		case lingograph.Assistant:
-			messages = append(messages, openai.AssistantMessage(msg.Content))
+			toolCalls, ok := msg.ModelMetadata.([]openai.ChatCompletionMessageToolCallParam)
+			if !ok {
+				messages = append(messages, openai.AssistantMessage(msg.Content))
+			} else {
+				messages = append(messages, openai.ChatCompletionMessageParamUnion{
+					OfAssistant: &openai.ChatCompletionAssistantMessageParam{
+						Content: openai.ChatCompletionAssistantMessageParamContentUnion{
+							OfString: param.NewOpt(msg.Content),
+						},
+						ToolCalls: toolCalls,
+					},
+				})
+			}
+		case lingograph.Function:
+			util.Assert(msg.ModelMetadata != nil, "ask nil ModelMetadata")
+			toolCallID := msg.ModelMetadata.(FunctionCallID)
+			messages = append(messages, openai.ToolMessage(msg.Content, toolCallID.ID))
 		default:
 			messages = append(messages, openai.UserMessage(msg.Content))
 		}
@@ -109,21 +147,27 @@ func (m *Model) ask(systemPrompt string, history []lingograph.Message, functions
 	newMessages := make([]lingograph.Message, 0, len(response.Choices))
 
 	for _, choice := range response.Choices {
-		msg := choice.Message
-		if msg.ToolCalls != nil && len(msg.ToolCalls) > 0 {
-			for _, toolCall := range msg.ToolCalls {
-				functionName := toolCall.Function.Name
-				arguments := toolCall.Function.Arguments
-				result, err := call(functions, functionName, arguments)
-				if err != nil {
-					return nil, fmt.Errorf("error calling function %s: %w", functionName, err)
-				}
-				// FIXME: these should be tool messages (but a bit complicated to implement)
-				newMessages = append(newMessages, result...)
+		messageToolCalls := make([]openai.ChatCompletionMessageToolCallParam, len(choice.Message.ToolCalls))
+		for i, toolCall := range choice.Message.ToolCalls {
+			messageToolCalls[i] = openai.ChatCompletionMessageToolCallParam{
+				ID:   toolCall.ID,
+				Type: toolCall.Type,
+				Function: openai.ChatCompletionMessageToolCallFunctionParam{
+					Name:      toolCall.Function.Name,
+					Arguments: toolCall.Function.Arguments,
+				},
 			}
-		} else {
-			newMessages = append(newMessages, lingograph.Message{Role: lingograph.Assistant, Content: msg.Content})
 		}
+
+		newMessages = append(newMessages, lingograph.Message{Role: lingograph.Assistant, Content: choice.Message.Content, ModelMetadata: messageToolCalls})
+		for _, toolCall := range choice.Message.ToolCalls {
+			result, err := call(functions, toolCall)
+			if err != nil {
+				return nil, fmt.Errorf("error calling function %s: %w", toolCall.Function.Name, err)
+			}
+			newMessages = append(newMessages, result...)
+		}
+		break
 	}
 
 	util.Assert(len(response.Choices) > 0, "no choices")
@@ -292,7 +336,7 @@ func ToOpenAISchema(s *jsonschema.Schema) (map[string]any, error) {
 	return out, nil
 }
 
-func AddFunctionUnsafe[I any](a Actor, name string, description string, fn func(I) ([]lingograph.Message, error)) {
+func AddFunctionUnsafe[I any](a Actor, name string, description string, fn func(I) ([]string, error)) {
 	var zero I
 	reflector := &jsonschema.Reflector{}
 	schema := reflector.Reflect(&zero)
@@ -314,7 +358,20 @@ func AddFunctionUnsafe[I any](a Actor, name string, description string, fn func(
 			return nil, err
 		}
 
-		return fn(i)
+		results, err := fn(i)
+		if err != nil {
+			return nil, err
+		}
+
+		messages := make([]lingograph.Message, 0, len(results))
+		for _, result := range results {
+			if err != nil {
+				return nil, err
+			}
+
+			messages = append(messages, lingograph.Message{Role: lingograph.Function, Content: result})
+		}
+		return messages, nil
 	}
 
 	a.addFunction(Function{
@@ -330,7 +387,7 @@ func AddFunctionUnsafe[I any](a Actor, name string, description string, fn func(
 
 func AddFunction[I any, O any](a Actor, name string, description string, fn func(I) (O, error)) {
 	AddFunctionUnsafe(a, name, description,
-		func(i I) ([]lingograph.Message, error) {
+		func(i I) ([]string, error) {
 			o, err := fn(i)
 			if err != nil {
 				return nil, err
@@ -341,7 +398,7 @@ func AddFunction[I any, O any](a Actor, name string, description string, fn func
 				return nil, err
 			}
 
-			return []lingograph.Message{{Role: lingograph.Assistant, Content: string(json)}}, nil
+			return []string{string(json)}, nil
 		})
 }
 
