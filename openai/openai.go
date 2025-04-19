@@ -365,12 +365,9 @@ func AddFunctionUnsafe[I any](a Actor, name string, description string, fn func(
 
 		messages := make([]lingograph.Message, 0, len(results))
 		for _, result := range results {
-			if err != nil {
-				return nil, err
-			}
-
 			messages = append(messages, lingograph.Message{Role: lingograph.Function, Content: result})
 		}
+
 		return messages, nil
 	}
 
