@@ -52,7 +52,7 @@ func NewSliceChat() Chat {
 
 const userActorID actorID = 0
 
-var nextActorID uint64 = 1
+var lastActorID uint32 = 0
 
 type Pipeline interface {
 	Execute(chat Chat) error
@@ -104,7 +104,7 @@ func NewActor(role Role, fn func(history []Message) (string, error)) Actor {
 	}
 
 	return Actor{
-		actorID: actorID(atomic.AddUint64(&nextActorID, 1)),
+		actorID: actorID(atomic.AddUint32(&lastActorID, 1)),
 		roleID:  role,
 		fn:      fnWrapped,
 	}
@@ -114,7 +114,7 @@ func NewActorUnsafe(role Role, fn func(history []Message) ([]Message, error)) Ac
 	util.Assert(fn != nil, "NewActorUnsafe nil fn")
 
 	return Actor{
-		actorID: actorID(atomic.AddUint64(&nextActorID, 1)),
+		actorID: actorID(atomic.AddUint32(&lastActorID, 1)),
 		roleID:  role,
 		fn:      fn,
 	}
