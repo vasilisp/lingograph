@@ -28,7 +28,7 @@ Your job is to translate the queries into function calls.
 func main() {
 	chat := lingograph.NewSliceChat()
 
-	openAIModel := openai.NewModel(openai.GPT4oMini, openai.APIKeyFromEnv())
+	openAIModel := openai.NewModel(openai.GPT41Mini, openai.APIKeyFromEnv())
 	openAIActor := openai.NewActor(openAIModel, systemPrompt)
 
 	db := make(map[string]Person)

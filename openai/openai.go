@@ -23,6 +23,9 @@ type ChatModel uint8
 const (
 	GPT4o ChatModel = iota
 	GPT4oMini
+	GPT41
+	GPT41Mini
+	GPT41Nano
 )
 
 func (m ChatModel) ToOpenAI() openai.ChatModel {
@@ -31,6 +34,12 @@ func (m ChatModel) ToOpenAI() openai.ChatModel {
 		return openai.ChatModelGPT4o
 	case GPT4oMini:
 		return openai.ChatModelGPT4oMini
+	case GPT41:
+		return "gpt-4.1"
+	case GPT41Mini:
+		return "gpt-4.1-mini"
+	case GPT41Nano:
+		return "gpt-4.1-nano"
 	default:
 		util.Assert(false, "invalid chat model")
 	}
