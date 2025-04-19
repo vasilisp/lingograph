@@ -52,7 +52,11 @@ func main() {
 	chain := lingograph.Chain(
 		lingograph.UserPrompt("Add John Doe to the database. He is 40 years old and his email is john.doe@example.com.", false),
 		openAIActor.Pipeline(nil, false, 3),
+		lingograph.UserPrompt("Add 10 random people in the database. Pick names that sound cool and ages that match.", false),
+		openAIActor.Pipeline(nil, false, 3),
 		lingograph.UserPrompt("Search for John Doe in the database.", false),
+		openAIActor.Pipeline(nil, false, 3),
+		lingograph.UserPrompt("Look up the coolest name you added earlier. Pick just one.", false),
 		openAIActor.Pipeline(nil, false, 3),
 	)
 
