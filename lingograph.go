@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/vasilisp/lingograph/internal/util"
+	"github.com/vasilisp/lingograph/store"
 )
 
 type Role uint8
@@ -30,10 +31,12 @@ type Chat interface {
 	History() []Message
 	write(message Message)
 	trim()
+	Store() store.Store
 }
 
 type SliceChat struct {
 	history []Message
+	store   store.Store
 }
 
 func (c *SliceChat) History() []Message {
@@ -48,8 +51,12 @@ func (c *SliceChat) trim() {
 	c.history = make([]Message, 0)
 }
 
+func (c *SliceChat) Store() store.Store {
+	return c.store
+}
+
 func NewSliceChat() Chat {
-	return &SliceChat{history: make([]Message, 0)}
+	return &SliceChat{history: make([]Message, 0), store: store.NewStore()}
 }
 
 const userActorID actorID = 0
@@ -89,14 +96,14 @@ func UserPrompt(message string, trim bool) Pipeline {
 type Actor struct {
 	actorID actorID
 	roleID  Role
-	fn      func(history []Message) ([]Message, error)
+	fn      func([]Message, store.Store) ([]Message, error)
 }
 
-func NewActor(role Role, fn func(history []Message) (string, error)) Actor {
+func NewActor(role Role, fn func([]Message, store.Store) (string, error)) Actor {
 	util.Assert(fn != nil, "NewActor nil fn")
 
-	fnWrapped := func(history []Message) ([]Message, error) {
-		content, err := fn(history)
+	fnWrapped := func(history []Message, r store.Store) ([]Message, error) {
+		content, err := fn(history, r)
 		if err != nil {
 			return nil, err
 		}
@@ -112,7 +119,7 @@ func NewActor(role Role, fn func(history []Message) (string, error)) Actor {
 	}
 }
 
-func NewActorUnsafe(role Role, fn func(history []Message) ([]Message, error)) Actor {
+func NewActorUnsafe(role Role, fn func([]Message, store.Store) ([]Message, error)) Actor {
 	util.Assert(fn != nil, "NewActorUnsafe nil fn")
 
 	return Actor{
@@ -146,7 +153,7 @@ func (a *ActorPipeline) Execute(chat Chat) error {
 
 	for i := range max(1, a.retryLimit) {
 		// FIXME: fn can theoretically modify history
-		newMessages, err = a.fn(history)
+		newMessages, err = a.fn(history, chat.Store())
 		if err == nil {
 			break
 		}
@@ -209,6 +216,7 @@ func Chain(pipelines ...Pipeline) Pipeline {
 type chatSplitter struct {
 	messages             []Message
 	offsetUniqueMessages int
+	store                store.Store
 }
 
 func split(chat Chat, nr int) []*chatSplitter {
@@ -237,6 +245,10 @@ func (c *chatSplitter) write(message Message) {
 func (c *chatSplitter) trim() {
 	c.messages = make([]Message, 0)
 	c.offsetUniqueMessages = 0
+}
+
+func (c *chatSplitter) Store() store.Store {
+	return c.store
 }
 
 func (c *chatSplitter) uniqueMessages() []Message {

@@ -8,10 +8,11 @@ import (
 
 	"github.com/vasilisp/lingograph"
 	"github.com/vasilisp/lingograph/openai"
+	"github.com/vasilisp/lingograph/store"
 )
 
 func stdinActor() lingograph.Actor {
-	return lingograph.NewActor(lingograph.User, func(history []lingograph.Message) (string, error) {
+	return lingograph.NewActor(lingograph.User, func(history []lingograph.Message, store store.Store) (string, error) {
 		reader := bufio.NewReader(os.Stdin)
 
 		text, err := reader.ReadString('\n')

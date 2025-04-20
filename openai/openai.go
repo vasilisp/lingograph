@@ -16,6 +16,7 @@ import (
 	"github.com/openai/openai-go/packages/param"
 	"github.com/vasilisp/lingograph"
 	"github.com/vasilisp/lingograph/internal/util"
+	"github.com/vasilisp/lingograph/store"
 )
 
 type ChatModel uint8
@@ -65,16 +66,16 @@ func NewModel(modelID ChatModel, apiKey string) Model {
 type Function struct {
 	name string
 	def  openai.FunctionDefinitionParam
-	fn   func(string) ([]lingograph.Message, error)
+	fn   func(string, store.Store) ([]lingograph.Message, error)
 }
 
-func call(functions map[string]Function, toolCall openai.ChatCompletionMessageToolCall) ([]lingograph.Message, error) {
+func call(functions map[string]Function, toolCall openai.ChatCompletionMessageToolCall, r store.Store) ([]lingograph.Message, error) {
 	fn, ok := functions[toolCall.Function.Name]
 	if !ok {
 		return nil, fmt.Errorf("function not found")
 	}
 
-	messages, err := fn.fn(toolCall.Function.Arguments)
+	messages, err := fn.fn(toolCall.Function.Arguments, r)
 	if err != nil {
 		return nil, err
 	}
@@ -100,7 +101,7 @@ type functionCallID struct {
 	ID string
 }
 
-func (m *Model) ask(systemPrompt string, history []lingograph.Message, functions map[string]Function) ([]lingograph.Message, error) {
+func (m *Model) ask(systemPrompt string, history []lingograph.Message, functions map[string]Function, r store.Store) ([]lingograph.Message, error) {
 	length := len(history)
 	if systemPrompt != "" {
 		length++
@@ -177,7 +178,7 @@ func (m *Model) ask(systemPrompt string, history []lingograph.Message, functions
 		choiceMessages := make([]lingograph.Message, 0)
 
 		for _, toolCall := range choice.Message.ToolCalls {
-			result, err := call(functions, toolCall)
+			result, err := call(functions, toolCall, r)
 			if err != nil {
 				return nil, fmt.Errorf("error calling function %s: %w", toolCall.Function.Name, err)
 			}
@@ -217,8 +218,8 @@ func NewActor(model Model, systemPrompt string) Actor {
 
 	actor.lingoActor = lingograph.NewActorUnsafe(
 		lingograph.Assistant,
-		func(history []lingograph.Message) ([]lingograph.Message, error) {
-			return model.ask(systemPrompt, history, actor.functions)
+		func(history []lingograph.Message, r store.Store) ([]lingograph.Message, error) {
+			return model.ask(systemPrompt, history, actor.functions, r)
 		},
 	)
 
@@ -367,7 +368,7 @@ func ToOpenAISchema(s *jsonschema.Schema) (map[string]any, error) {
 	return out, nil
 }
 
-func AddFunctionUnsafe[I any](a Actor, name string, description string, fn func(I) ([]string, error)) {
+func AddFunctionUnsafe[I any](a Actor, name string, description string, fn func(I, store.Store) ([]string, error)) {
 	var zero I
 	reflector := &jsonschema.Reflector{}
 	schema := reflector.Reflect(&zero)
@@ -382,14 +383,14 @@ func AddFunctionUnsafe[I any](a Actor, name string, description string, fn func(
 		log.Fatalf("cannot convert schema to OpenAI schema: %s", err)
 	}
 
-	fnWrapped := func(input string) ([]lingograph.Message, error) {
+	fnWrapped := func(input string, r store.Store) ([]lingograph.Message, error) {
 		var i I
 		err := json.Unmarshal([]byte(input), &i)
 		if err != nil {
 			return nil, err
 		}
 
-		results, err := fn(i)
+		results, err := fn(i, r)
 		if err != nil {
 			return nil, err
 		}
@@ -413,10 +414,10 @@ func AddFunctionUnsafe[I any](a Actor, name string, description string, fn func(
 	})
 }
 
-func AddFunction[I any, O any](a Actor, name string, description string, fn func(I) (O, error)) {
+func AddFunction[I any, O any](a Actor, name string, description string, fn func(I, store.Store) (O, error)) {
 	AddFunctionUnsafe(a, name, description,
-		func(i I) ([]string, error) {
-			o, err := fn(i)
+		func(i I, r store.Store) ([]string, error) {
+			o, err := fn(i, r)
 			if err != nil {
 				return nil, err
 			}

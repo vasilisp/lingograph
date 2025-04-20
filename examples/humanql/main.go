@@ -5,6 +5,7 @@ import (
 
 	"github.com/vasilisp/lingograph"
 	"github.com/vasilisp/lingograph/openai"
+	"github.com/vasilisp/lingograph/store"
 )
 
 type Person struct {
@@ -33,13 +34,13 @@ func main() {
 
 	db := make(map[string]Person)
 
-	openai.AddFunction(openAIActor, "add_person", "Add a person to the database", func(person Person) (string, error) {
+	openai.AddFunction(openAIActor, "add_person", "Add a person to the database", func(person Person, r store.Store) (string, error) {
 		db[person.Name] = person
 		fmt.Println("added", person.Name, "to the database")
 		return fmt.Sprintf("added %s to the database", person.Name), nil
 	})
 
-	openai.AddFunction(openAIActor, "search_person", "Search for a person by name", func(name WrappedString) (string, error) {
+	openai.AddFunction(openAIActor, "search_person", "Search for a person by name", func(name WrappedString, r store.Store) (string, error) {
 		person, ok := db[name.Value]
 		if ok {
 			fmt.Printf("found %s in the database. They are %d years old and their email is %s\n", person.Name, person.Age, person.Email)
