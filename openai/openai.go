@@ -80,9 +80,10 @@ func call(functions map[string]Function, toolCall openai.ChatCompletionMessageTo
 	}
 
 	messagesWithMetadata := make([]lingograph.Message, 0, len(messages))
-	for _, msg := range messages {
+	for i, msg := range messages {
 		if msg.Role == lingograph.Function {
-			msg.ModelMetadata = FunctionCallID{ID: toolCall.ID}
+			// for multiple responses per tool call: each needs a unique call ID
+			msg.ModelMetadata = functionCallID{ID: fmt.Sprintf("%s_%d", toolCall.ID, i)}
 		}
 		messagesWithMetadata = append(messagesWithMetadata, msg)
 	}
@@ -90,7 +91,12 @@ func call(functions map[string]Function, toolCall openai.ChatCompletionMessageTo
 	return messagesWithMetadata, nil
 }
 
-type FunctionCallID struct {
+type functionCallMetadata struct {
+	param       openai.ChatCompletionMessageToolCallParam
+	nrResponses int
+}
+
+type functionCallID struct {
 	ID string
 }
 
@@ -113,22 +119,33 @@ func (m *Model) ask(systemPrompt string, history []lingograph.Message, functions
 	for _, msg := range history {
 		switch msg.Role {
 		case lingograph.Assistant:
-			toolCalls, ok := msg.ModelMetadata.([]openai.ChatCompletionMessageToolCallParam)
+			toolCalls, ok := msg.ModelMetadata.([]functionCallMetadata)
 			if !ok {
 				messages = append(messages, openai.AssistantMessage(msg.Content))
 			} else {
+				toolCallsExpanded := make([]openai.ChatCompletionMessageToolCallParam, 0, len(toolCalls))
+
+				for _, toolCall := range toolCalls {
+					for i := range toolCall.nrResponses {
+						param := toolCall.param
+						// has to match the expansion in call()
+						param.ID = fmt.Sprintf("%s_%d", toolCall.param.ID, i)
+						toolCallsExpanded = append(toolCallsExpanded, param)
+					}
+				}
+
 				messages = append(messages, openai.ChatCompletionMessageParamUnion{
 					OfAssistant: &openai.ChatCompletionAssistantMessageParam{
 						Content: openai.ChatCompletionAssistantMessageParamContentUnion{
 							OfString: param.NewOpt(msg.Content),
 						},
-						ToolCalls: toolCalls,
+						ToolCalls: toolCallsExpanded,
 					},
 				})
 			}
 		case lingograph.Function:
 			util.Assert(msg.ModelMetadata != nil, "ask nil ModelMetadata")
-			toolCallID := msg.ModelMetadata.(FunctionCallID)
+			toolCallID := msg.ModelMetadata.(functionCallID)
 			messages = append(messages, openai.ToolMessage(msg.Content, toolCallID.ID))
 		default:
 			messages = append(messages, openai.UserMessage(msg.Content))
@@ -153,34 +170,39 @@ func (m *Model) ask(systemPrompt string, history []lingograph.Message, functions
 		return nil, err
 	}
 
-	newMessages := make([]lingograph.Message, 0, len(response.Choices))
+	functionCalls := make([]functionCallMetadata, 0)
+	responseMessages := make([]lingograph.Message, 0, len(response.Choices))
 
 	for _, choice := range response.Choices {
-		messageToolCalls := make([]openai.ChatCompletionMessageToolCallParam, len(choice.Message.ToolCalls))
-		for i, toolCall := range choice.Message.ToolCalls {
-			messageToolCalls[i] = openai.ChatCompletionMessageToolCallParam{
-				ID:   toolCall.ID,
-				Type: toolCall.Type,
-				Function: openai.ChatCompletionMessageToolCallFunctionParam{
-					Name:      toolCall.Function.Name,
-					Arguments: toolCall.Function.Arguments,
-				},
-			}
-		}
+		choiceMessages := make([]lingograph.Message, 0)
 
-		newMessages = append(newMessages, lingograph.Message{Role: lingograph.Assistant, Content: choice.Message.Content, ModelMetadata: messageToolCalls})
 		for _, toolCall := range choice.Message.ToolCalls {
 			result, err := call(functions, toolCall)
 			if err != nil {
 				return nil, fmt.Errorf("error calling function %s: %w", toolCall.Function.Name, err)
 			}
-			newMessages = append(newMessages, result...)
+
+			functionCalls = append(functionCalls, functionCallMetadata{
+				param: openai.ChatCompletionMessageToolCallParam{
+					ID:   toolCall.ID,
+					Type: toolCall.Type,
+					Function: openai.ChatCompletionMessageToolCallFunctionParam{
+						Name:      toolCall.Function.Name,
+						Arguments: toolCall.Function.Arguments,
+					},
+				},
+				nrResponses: len(result),
+			})
+
+			choiceMessages = append(choiceMessages, result...)
 		}
-		break
+
+		responseMessages = append(responseMessages, lingograph.Message{Role: lingograph.Assistant, Content: choice.Message.Content, ModelMetadata: functionCalls})
+		responseMessages = append(responseMessages, choiceMessages...)
 	}
 
 	util.Assert(len(response.Choices) > 0, "no choices")
-	return newMessages, nil
+	return responseMessages, nil
 }
 
 type Actor struct {
