@@ -348,3 +348,26 @@ func (l loop) trims() bool {
 func Loop(pipeline Pipeline, limit int) Pipeline {
 	return loop{pipeline: pipeline, limit: limit}
 }
+
+type ifPipeline struct {
+	condition store.Var[bool]
+	left      Pipeline
+	right     Pipeline
+}
+
+func (p ifPipeline) Execute(chat Chat) error {
+	condition, found := store.Get(chat.Store(), p.condition)
+	if found && condition {
+		return p.left.Execute(chat)
+	}
+	return p.right.Execute(chat)
+}
+
+func (p ifPipeline) trims() bool {
+	// CHECKME: grey area
+	return p.left.trims() && p.right.trims()
+}
+
+func If(condition store.Var[bool], left Pipeline, right Pipeline) Pipeline {
+	return ifPipeline{condition: condition, left: left, right: right}
+}
