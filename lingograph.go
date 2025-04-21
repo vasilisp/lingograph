@@ -325,14 +325,19 @@ func (p parallel) Execute(chat Chat) error {
 	return nil
 }
 
-type loop struct {
-	pipeline Pipeline
-	limit    int
+type while struct {
+	pipeline  Pipeline
+	condition store.Var[bool]
 }
 
-func (l loop) Execute(chat Chat) error {
-	for i := 0; l.limit < 0 || i < l.limit; i++ {
-		err := l.pipeline.Execute(chat)
+func (w while) Execute(chat Chat) error {
+	for {
+		condition, found := store.Get(chat.Store(), w.condition)
+		if !found || !condition {
+			break
+		}
+
+		err := w.pipeline.Execute(chat)
 		if err != nil {
 			return err
 		}
@@ -341,12 +346,12 @@ func (l loop) Execute(chat Chat) error {
 	return nil
 }
 
-func (l loop) trims() bool {
-	return l.pipeline.trims()
+func (w while) trims() bool {
+	return w.pipeline.trims()
 }
 
-func Loop(pipeline Pipeline, limit int) Pipeline {
-	return loop{pipeline: pipeline, limit: limit}
+func While(condition store.Var[bool], pipeline Pipeline) Pipeline {
+	return while{pipeline: pipeline, condition: condition}
 }
 
 type ifPipeline struct {

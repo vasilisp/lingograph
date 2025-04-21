@@ -30,15 +30,17 @@ func main() {
 	stdinActor := stdinActor()
 	client := openai.NewClient(openai.APIKeyFromEnv())
 	openAIActor := openai.NewActor(client, openai.GPT41Nano, "You are a helpful assistant.")
+	condition := store.Var[bool]{}
+	store.Set(chat.Store(), condition, true)
 
-	pipeline := lingograph.Loop(
+	pipeline := lingograph.While(
+		condition,
 		lingograph.Chain(
 			stdinActor.Pipeline(nil, false, 0),
 			openAIActor.Pipeline(func(message lingograph.Message) {
 				fmt.Println(message.Content)
 			}, false, 3),
 		),
-		10,
 	)
 
 	pipeline.Execute(chat)

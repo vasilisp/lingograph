@@ -29,7 +29,7 @@ combinators:
 
 - **Chain**: executes a sequence of steps in order
 - **Parallel**: runs multiple pipelines concurrently
-- **Loop**: repeats a pipeline with optional limits
+- **While**: repeats a pipeline while a store variable is true
 - **If**: conditionally executes one of two pipelines based on a store variable
 
 ### Store
