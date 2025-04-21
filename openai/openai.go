@@ -49,9 +49,8 @@ func (m ChatModel) ToOpenAI() openai.ChatModel {
 	return openai.ChatModelGPT4o
 }
 
-type Model struct {
-	client  *openai.Client
-	modelID ChatModel
+type Client struct {
+	client *openai.Client
 }
 
 func APIKeyFromEnv() string {
@@ -62,12 +61,12 @@ func APIKeyFromEnv() string {
 	return key
 }
 
-func NewModel(modelID ChatModel, apiKey string) Model {
+func NewClient(apiKey string) Client {
 	if apiKey == "" {
 		log.Fatal("apiKey is empty")
 	}
 	client := openai.NewClient(option.WithAPIKey(apiKey))
-	return Model{client: &client, modelID: modelID}
+	return Client{client: &client}
 }
 
 type Function struct {
@@ -108,7 +107,7 @@ type functionCallID struct {
 	ID string
 }
 
-func (m *Model) ask(systemPrompt string, history []lingograph.Message, functions map[string]Function, r store.Store) ([]lingograph.Message, error) {
+func (client Client) ask(modelID ChatModel, systemPrompt string, history []lingograph.Message, functions map[string]Function, r store.Store) ([]lingograph.Message, error) {
 	length := len(history)
 	if systemPrompt != "" {
 		length++
@@ -174,8 +173,8 @@ func (m *Model) ask(systemPrompt string, history []lingograph.Message, functions
 		})
 	}
 
-	response, err := m.client.Chat.Completions.New(context.Background(), openai.ChatCompletionNewParams{
-		Model:    m.modelID.ToOpenAI(),
+	response, err := client.client.Chat.Completions.New(context.Background(), openai.ChatCompletionNewParams{
+		Model:    modelID.ToOpenAI(),
 		Messages: messages,
 		Tools:    toolParams,
 	})
@@ -223,7 +222,7 @@ type Actor struct {
 	functions  map[string]Function
 }
 
-func NewActor(model Model, systemPrompt string) Actor {
+func NewActor(client Client, chatModel ChatModel, systemPrompt string) Actor {
 	functions := make(map[string]Function)
 
 	actor := Actor{functions: functions}
@@ -231,7 +230,7 @@ func NewActor(model Model, systemPrompt string) Actor {
 	actor.lingoActor = lingograph.NewActorUnsafe(
 		lingograph.Assistant,
 		func(history []lingograph.Message, r store.Store) ([]lingograph.Message, error) {
-			return model.ask(systemPrompt, history, actor.functions, r)
+			return client.ask(chatModel, systemPrompt, history, actor.functions, r)
 		},
 	)
 
