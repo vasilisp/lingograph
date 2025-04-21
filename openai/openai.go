@@ -55,10 +55,17 @@ type Model struct {
 }
 
 func APIKeyFromEnv() string {
-	return os.Getenv("OPENAI_API_KEY")
+	key, exists := os.LookupEnv("OPENAI_API_KEY")
+	if !exists {
+		log.Fatal("OPENAI_API_KEY environment variable is not set")
+	}
+	return key
 }
 
 func NewModel(modelID ChatModel, apiKey string) Model {
+	if apiKey == "" {
+		log.Fatal("apiKey is empty")
+	}
 	client := openai.NewClient(option.WithAPIKey(apiKey))
 	return Model{client: &client, modelID: modelID}
 }
