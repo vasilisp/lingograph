@@ -29,7 +29,7 @@ func main() {
 
 	stdinActor := stdinActor()
 	client := openai.NewClient(openai.APIKeyFromEnv())
-	openAIActor := openai.NewActor(client, openai.GPT4oMini, "You are a helpful assistant.")
+	openAIActor := openai.NewActor(client, openai.GPT41Nano, "You are a helpful assistant.")
 
 	pipeline := lingograph.Loop(
 		lingograph.Chain(
