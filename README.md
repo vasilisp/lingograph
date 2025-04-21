@@ -30,6 +30,15 @@ combinators:
 - **Chain**: executes a sequence of steps in order
 - **Parallel**: runs multiple pipelines concurrently
 - **Loop**: repeats a pipeline with optional limits
+- **If**: conditionally executes one of two pipelines based on a store variable
+
+### Store
+
+The **store** provides a way to maintain state between pipeline steps. It
+supports type-safe variables that can be shared across different parts of the
+pipeline. Store variables can be modified from within functions called by
+actors and are particularly useful with conditional pipelines, allowing
+you to branch the execution flow based on runtime conditions.
 
 ## Quick Start
 
