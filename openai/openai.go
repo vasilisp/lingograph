@@ -135,13 +135,18 @@ func (m *Model) ask(systemPrompt string, history []lingograph.Message, functions
 					}
 				}
 
-				messages = append(messages, openai.ChatCompletionMessageParamUnion{
-					OfAssistant: &openai.ChatCompletionAssistantMessageParam{
-						Content: openai.ChatCompletionAssistantMessageParamContentUnion{
-							OfString: param.NewOpt(msg.Content),
-						},
-						ToolCalls: toolCallsExpanded,
+				message := openai.ChatCompletionAssistantMessageParam{
+					Content: openai.ChatCompletionAssistantMessageParamContentUnion{
+						OfString: param.NewOpt(msg.Content),
 					},
+				}
+
+				if len(toolCallsExpanded) > 0 {
+					message.ToolCalls = toolCallsExpanded
+				}
+
+				messages = append(messages, openai.ChatCompletionMessageParamUnion{
+					OfAssistant: &message,
 				})
 			}
 		case lingograph.Function:
