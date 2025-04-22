@@ -151,16 +151,24 @@ func (a *ActorPipeline) Execute(chat Chat) error {
 	var err error
 	var newMessages []Message = nil
 
-	for i := range max(1, a.retryLimit) {
+	retryLimit := max(1, a.retryLimit)
+
+	for i := range retryLimit {
 		// FIXME: fn can theoretically modify history
 		newMessages, err = a.fn(history, chat.Store())
 		if err == nil {
 			break
 		}
 
-		backoff := time.Duration(math.Pow(2, float64(i))) * time.Second
 		util.Log.Printf("error executing pipeline: %v", err)
-		time.Sleep(backoff)
+
+		if i < retryLimit-1 {
+			backoff := time.Duration(math.Pow(2, float64(i))) * time.Second
+			time.Sleep(backoff)
+		}
+	}
+	if err != nil {
+		return err
 	}
 
 	if a.trim {
