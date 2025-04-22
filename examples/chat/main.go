@@ -15,12 +15,11 @@ func main() {
 	client := openai.NewClient(openai.APIKeyFromEnv())
 	openAIActor := openai.NewActor(client, openai.GPT41Nano, "You are a helpful assistant.")
 
-	// dummy; EOF will terminate
-	continueChat := store.Var[bool]{}
-	store.Set(chat.Store(), continueChat, true)
-
 	pipeline := lingograph.While(
-		continueChat,
+		// dummy; EOF will terminate
+		func(store.StoreRO) bool {
+			return true
+		},
 		lingograph.Chain(
 			extra.Stdin().Pipeline(nil, false, 0),
 			openAIActor.Pipeline(func(message lingograph.Message) {
