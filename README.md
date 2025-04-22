@@ -6,7 +6,7 @@ combinators.
 
 ## Core Concepts
 
-`lingograph` is built around two main concepts:
+`lingograph` is built around the following concepts:
 
 ### Actor
 
@@ -29,8 +29,8 @@ combinators:
 
 - **Chain**: executes a sequence of steps in order
 - **Parallel**: runs multiple pipelines concurrently
-- **While**: repeats a pipeline while a store variable is true
-- **If**: conditionally executes one of two pipelines based on a store variable
+- **While**: repeats a pipeline while a predicate over the store holds true
+- **If**: conditionally executes one of two pipelines based on a predicate over the store
 
 ### Store
 
@@ -51,3 +51,15 @@ go get github.com/vasilisp/lingograph
 
 Then explore the [`examples`](https://github.com/vasilisp/lingograph/tree/main/examples) directory to see how the core concepts
 fit together.
+
+## Example Projects
+
+The following projects demonstrate `lingograph`:
+
+- [velora](https://github.com/vasilisp/velora): An AI-powered command-line
+  workout tracker and coach. It uses `lingograph` to build complex pipelines for
+  analyzing workout data and producing training recommendations.
+
+- [wikai](https://github.com/vasilisp/wikai): A Git-powered note-taking app with
+  AI capabilities. It builds a RAG system utilizing `lingograph` pipelines with
+  heavy usage of the (OpenAI) function interface.
