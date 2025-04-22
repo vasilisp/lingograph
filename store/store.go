@@ -44,3 +44,15 @@ func Get[T any](r Store, v Var[T]) (T, bool) {
 func Set[T any](r Store, v Var[T], val T) {
 	r.vars.Store(v.id, val)
 }
+
+type StoreRO struct {
+	store Store
+}
+
+func (r Store) RO() StoreRO {
+	return StoreRO{store: r}
+}
+
+func GetRO[T any](r StoreRO, v Var[T]) (T, bool) {
+	return Get(r.store, v)
+}
