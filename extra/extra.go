@@ -2,6 +2,8 @@ package extra
 
 import (
 	"bufio"
+	"bytes"
+	"io"
 	"os"
 	"regexp"
 	"unicode"
@@ -13,29 +15,33 @@ import (
 
 var sanitize = regexp.MustCompile(`[\x00-\x08\x0B-\x1F\x7F]|\x1B\[[0-9;]*[a-zA-Z]`)
 
-func SanitizeOutput(input string, removeNewlines bool, file *os.File) {
+func SanitizeOutput(input string, removeNewlines bool, writer io.Writer) {
 	// Remove ASCII control characters and ANSI escape sequences
 	cleaned := sanitize.ReplaceAllString(input, "")
 
 	// Create a normalizing writer that writes to the file
-	writer := norm.NFC.Writer(file)
+	writerNormalizing := norm.NFC.Writer(writer)
 
 	// Process and write runes directly
 	for _, r := range cleaned {
 		if r == '\n' {
 			if removeNewlines {
-				writer.Write([]byte{' '})
+				writerNormalizing.Write([]byte{' '})
 				continue
 			}
-			writer.Write([]byte{'\n'})
+			writerNormalizing.Write([]byte{'\n'})
 		} else if unicode.IsPrint(r) || unicode.IsSpace(r) {
 			// Write the rune directly to the normalizing writer
-			writer.Write([]byte(string(r)))
+			writerNormalizing.Write([]byte(string(r)))
 		}
 	}
+	writerNormalizing.Close()
+}
 
-	// Ensure everything is flushed
-	writer.Close()
+func SanitizeOutputString(input string, removeNewlines bool) string {
+	writer := bytes.NewBuffer(nil)
+	SanitizeOutput(input, removeNewlines, writer)
+	return writer.String()
 }
 
 func Echoln(file *os.File, prefix string) func(msg lingograph.Message) {
