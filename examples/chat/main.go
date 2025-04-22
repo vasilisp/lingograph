@@ -1,7 +1,7 @@
 package main
 
 import (
-	"fmt"
+	"os"
 
 	"github.com/vasilisp/lingograph"
 	"github.com/vasilisp/lingograph/extra"
@@ -22,9 +22,7 @@ func main() {
 		},
 		lingograph.Chain(
 			extra.Stdin().Pipeline(nil, false, 0),
-			openAIActor.Pipeline(func(message lingograph.Message) {
-				fmt.Println(message.Content)
-			}, false, 1),
+			openAIActor.Pipeline(extra.Echoln(os.Stdout, "assistant: "), false, 1),
 		),
 	)
 

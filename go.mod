@@ -6,6 +6,7 @@ require (
 	github.com/invopop/jsonschema v0.13.0
 	github.com/openai/openai-go v0.1.0-beta.10
 	github.com/wk8/go-ordered-map/v2 v2.1.8
+	golang.org/x/text v0.21.0
 )
 
 require (

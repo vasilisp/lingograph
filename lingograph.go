@@ -18,6 +18,18 @@ const (
 	Function
 )
 
+func (r Role) String() string {
+	switch r {
+	case User:
+		return "user"
+	case Assistant:
+		return "assistant"
+	case Function:
+		return "function"
+	}
+	return "unknown"
+}
+
 type actorID uint32
 
 type Message struct {
