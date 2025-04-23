@@ -9,6 +9,7 @@ import (
 	"unicode"
 
 	"github.com/vasilisp/lingograph"
+	"github.com/vasilisp/lingograph/pkg/slicev"
 	"github.com/vasilisp/lingograph/store"
 	"golang.org/x/text/unicode/norm"
 )
@@ -54,7 +55,7 @@ func Echoln(file *os.File, prefix string) func(msg lingograph.Message) {
 }
 
 func Stdin() lingograph.Actor {
-	return lingograph.NewActor(lingograph.User, func(history []lingograph.Message, r store.Store) (string, error) {
+	return lingograph.NewActor(lingograph.User, func(history slicev.RO[lingograph.Message], r store.Store) (string, error) {
 		reader := bufio.NewReader(os.Stdin)
 
 		text, err := reader.ReadString('\n')

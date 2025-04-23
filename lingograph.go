@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/vasilisp/lingograph/internal/util"
+	"github.com/vasilisp/lingograph/pkg/slicev"
 	"github.com/vasilisp/lingograph/store"
 )
 
@@ -40,7 +41,7 @@ type Message struct {
 }
 
 type Chat interface {
-	History() []Message
+	History() slicev.RO[Message]
 	write(message Message)
 	trim()
 	Store() store.Store
@@ -51,8 +52,8 @@ type SliceChat struct {
 	store   store.Store
 }
 
-func (c *SliceChat) History() []Message {
-	return c.history
+func (c *SliceChat) History() slicev.RO[Message] {
+	return slicev.NewRO(c.history)
 }
 
 func (c *SliceChat) write(message Message) {
@@ -108,13 +109,13 @@ func UserPrompt(message string, trim bool) Pipeline {
 type Actor struct {
 	actorID actorID
 	roleID  Role
-	fn      func([]Message, store.Store) ([]Message, error)
+	fn      func(slicev.RO[Message], store.Store) ([]Message, error)
 }
 
-func NewActor(role Role, fn func([]Message, store.Store) (string, error)) Actor {
+func NewActor(role Role, fn func(slicev.RO[Message], store.Store) (string, error)) Actor {
 	util.Assert(fn != nil, "NewActor nil fn")
 
-	fnWrapped := func(history []Message, r store.Store) ([]Message, error) {
+	fnWrapped := func(history slicev.RO[Message], r store.Store) ([]Message, error) {
 		content, err := fn(history, r)
 		if err != nil {
 			return nil, err
@@ -131,7 +132,7 @@ func NewActor(role Role, fn func([]Message, store.Store) (string, error)) Actor 
 	}
 }
 
-func NewActorUnsafe(role Role, fn func([]Message, store.Store) ([]Message, error)) Actor {
+func NewActorUnsafe(role Role, fn func(slicev.RO[Message], store.Store) ([]Message, error)) Actor {
 	util.Assert(fn != nil, "NewActorUnsafe nil fn")
 
 	return Actor{
@@ -166,7 +167,6 @@ func (a *ActorPipeline) Execute(chat Chat) error {
 	retryLimit := max(1, a.retryLimit)
 
 	for i := range retryLimit {
-		// FIXME: fn can theoretically modify history
 		newMessages, err = a.fn(history, chat.Store())
 		if err == nil {
 			break
@@ -243,8 +243,10 @@ func split(chat Chat, nr int) []*chatSplitter {
 	splitters := make([]*chatSplitter, nr)
 
 	for i := range splitters {
-		messages := make([]Message, len(chat.History()))
-		copy(messages, chat.History())
+		history := chat.History()
+		messages := make([]Message, history.Len())
+		history.CopyTo(messages)
+
 		splitters[i] = &chatSplitter{
 			messages:             messages,
 			offsetUniqueMessages: len(messages),
@@ -254,8 +256,8 @@ func split(chat Chat, nr int) []*chatSplitter {
 	return splitters
 }
 
-func (c *chatSplitter) History() []Message {
-	return c.messages
+func (c *chatSplitter) History() slicev.RO[Message] {
+	return slicev.NewRO(c.messages)
 }
 
 func (c *chatSplitter) write(message Message) {

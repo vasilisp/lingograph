@@ -16,6 +16,7 @@ import (
 	"github.com/openai/openai-go/packages/param"
 	"github.com/vasilisp/lingograph"
 	"github.com/vasilisp/lingograph/internal/util"
+	"github.com/vasilisp/lingograph/pkg/slicev"
 	"github.com/vasilisp/lingograph/store"
 )
 
@@ -107,8 +108,8 @@ type functionCallID struct {
 	ID string
 }
 
-func (client Client) ask(modelID ChatModel, systemPrompt string, history []lingograph.Message, functions map[string]Function, r store.Store) ([]lingograph.Message, error) {
-	length := len(history)
+func (client Client) ask(modelID ChatModel, systemPrompt string, history slicev.RO[lingograph.Message], functions map[string]Function, r store.Store) ([]lingograph.Message, error) {
+	length := history.Len()
 	if systemPrompt != "" {
 		length++
 	}
@@ -123,7 +124,9 @@ func (client Client) ask(modelID ChatModel, systemPrompt string, history []lingo
 	// be the case. Strip off function info and fall back to user messages if
 	// necessary.
 
-	for _, msg := range history {
+	it := history.Iterator()
+	for it.Next() {
+		msg := it.Value()
 		switch msg.Role {
 		case lingograph.Assistant:
 			toolCalls, ok := msg.ModelMetadata.([]functionCallMetadata)
@@ -229,7 +232,7 @@ func NewActor(client Client, chatModel ChatModel, systemPrompt string) Actor {
 
 	actor.lingoActor = lingograph.NewActorUnsafe(
 		lingograph.Assistant,
-		func(history []lingograph.Message, r store.Store) ([]lingograph.Message, error) {
+		func(history slicev.RO[lingograph.Message], r store.Store) ([]lingograph.Message, error) {
 			return client.ask(chatModel, systemPrompt, history, actor.functions, r)
 		},
 	)
