@@ -11,6 +11,8 @@ import (
 	"github.com/vasilisp/lingograph/store"
 )
 
+const maxHistoryLength = 1000
+
 type Role uint8
 
 const (
@@ -58,6 +60,15 @@ func (c *chat) History() slicev.RO[Message] {
 }
 
 func (c *chat) write(message Message) {
+	if len(c.history) >= maxHistoryLength {
+		keep := maxHistoryLength / 2
+		if keep < c.offsetUnique {
+			c.offsetUnique = 0
+		} else {
+			c.offsetUnique -= len(c.history) - keep
+		}
+		c.history = c.history[len(c.history)-keep:]
+	}
 	c.history = append(c.history, message)
 }
 
