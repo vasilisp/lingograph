@@ -27,7 +27,7 @@ Your job is to translate the queries into function calls.
 - search for a person by name`
 
 func main() {
-	chat := lingograph.NewSliceChat()
+	chat := lingograph.NewChat()
 
 	client := openai.NewClient(openai.APIKeyFromEnv())
 	openAIActor := openai.NewActor(client, openai.GPT41Nano, systemPrompt)

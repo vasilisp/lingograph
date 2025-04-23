@@ -10,7 +10,7 @@ import (
 )
 
 func main() {
-	chat := lingograph.NewSliceChat()
+	chat := lingograph.NewChat()
 
 	client := openai.NewClient(openai.APIKeyFromEnv())
 	openAIActor := openai.NewActor(client, openai.GPT41Nano, "You are a helpful assistant.")

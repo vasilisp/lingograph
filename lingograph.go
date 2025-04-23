@@ -47,29 +47,35 @@ type Chat interface {
 	Store() store.Store
 }
 
-type SliceChat struct {
-	history []Message
-	store   store.Store
+type chat struct {
+	history      []Message
+	store        store.Store
+	offsetUnique int
 }
 
-func (c *SliceChat) History() slicev.RO[Message] {
+func (c *chat) History() slicev.RO[Message] {
 	return slicev.NewRO(c.history)
 }
 
-func (c *SliceChat) write(message Message) {
+func (c *chat) write(message Message) {
 	c.history = append(c.history, message)
 }
 
-func (c *SliceChat) trim() {
+func (c *chat) trim() {
 	c.history = make([]Message, 0)
+	c.offsetUnique = 0
 }
 
-func (c *SliceChat) Store() store.Store {
+func (c *chat) Store() store.Store {
 	return c.store
 }
 
-func NewSliceChat() Chat {
-	return &SliceChat{history: make([]Message, 0), store: store.NewStore()}
+func (c *chat) uniqueMessages() []Message {
+	return c.history[c.offsetUnique:]
+}
+
+func NewChat() Chat {
+	return &chat{history: make([]Message, 0), store: store.NewStore(), offsetUnique: 0}
 }
 
 const userActorID actorID = 0
@@ -233,48 +239,22 @@ func Chain(pipelines ...Pipeline) Pipeline {
 	return chain{pipelines: pipelines}
 }
 
-type chatSplitter struct {
-	messages             []Message
-	offsetUniqueMessages int
-	store                store.Store
-}
-
-func split(chat Chat, nr int) []*chatSplitter {
-	splitters := make([]*chatSplitter, nr)
+func split(c Chat, nr int) []*chat {
+	splitters := make([]*chat, nr)
 
 	for i := range splitters {
-		history := chat.History()
+		history := c.History()
 		messages := make([]Message, history.Len())
 		history.CopyTo(messages)
 
-		splitters[i] = &chatSplitter{
-			messages:             messages,
-			offsetUniqueMessages: len(messages),
+		splitters[i] = &chat{
+			history:      messages,
+			offsetUnique: len(messages),
+			store:        c.Store(),
 		}
 	}
 
 	return splitters
-}
-
-func (c *chatSplitter) History() slicev.RO[Message] {
-	return slicev.NewRO(c.messages)
-}
-
-func (c *chatSplitter) write(message Message) {
-	c.messages = append(c.messages, message)
-}
-
-func (c *chatSplitter) trim() {
-	c.messages = make([]Message, 0)
-	c.offsetUniqueMessages = 0
-}
-
-func (c *chatSplitter) Store() store.Store {
-	return c.store
-}
-
-func (c *chatSplitter) uniqueMessages() []Message {
-	return c.messages[c.offsetUniqueMessages:]
 }
 
 type parallel struct {
