@@ -13,7 +13,7 @@ func main() {
 	chat := lingograph.NewChat()
 
 	client := openai.NewClient(openai.APIKeyFromEnv())
-	openAIActor := openai.NewActor(client, openai.GPT41Nano, "You are a helpful assistant.")
+	openAIActor := openai.NewActor(client, openai.GPT41Nano, "You are a helpful assistant.", nil)
 
 	pipeline := lingograph.While(
 		// dummy; EOF will terminate

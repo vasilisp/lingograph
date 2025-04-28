@@ -108,7 +108,7 @@ type functionCallID struct {
 	ID string
 }
 
-func (client Client) ask(modelID ChatModel, systemPrompt string, history slicev.RO[lingograph.Message], functions map[string]Function, r store.Store) ([]lingograph.Message, error) {
+func (client Client) ask(modelID ChatModel, systemPrompt string, history slicev.RO[lingograph.Message], functions map[string]Function, r store.Store, temperature *float64) ([]lingograph.Message, error) {
 	length := history.Len()
 	if systemPrompt != "" {
 		length++
@@ -176,10 +176,16 @@ func (client Client) ask(modelID ChatModel, systemPrompt string, history slicev.
 		})
 	}
 
+	temperatureOpt := param.NullOpt[float64]()
+	if temperature != nil {
+		temperatureOpt = param.NewOpt(*temperature)
+	}
+
 	response, err := client.client.Chat.Completions.New(context.Background(), openai.ChatCompletionNewParams{
-		Model:    modelID.ToOpenAI(),
-		Messages: messages,
-		Tools:    toolParams,
+		Model:       modelID.ToOpenAI(),
+		Messages:    messages,
+		Tools:       toolParams,
+		Temperature: temperatureOpt,
 	})
 	if err != nil {
 		return nil, err
@@ -225,7 +231,7 @@ type Actor struct {
 	functions  map[string]Function
 }
 
-func NewActor(client Client, chatModel ChatModel, systemPrompt string) Actor {
+func NewActor(client Client, chatModel ChatModel, systemPrompt string, temperature *float64) Actor {
 	functions := make(map[string]Function)
 
 	actor := Actor{functions: functions}
@@ -233,7 +239,7 @@ func NewActor(client Client, chatModel ChatModel, systemPrompt string) Actor {
 	actor.lingoActor = lingograph.NewActorUnsafe(
 		lingograph.Assistant,
 		func(history slicev.RO[lingograph.Message], r store.Store) ([]lingograph.Message, error) {
-			return client.ask(chatModel, systemPrompt, history, actor.functions, r)
+			return client.ask(chatModel, systemPrompt, history, actor.functions, r, temperature)
 		},
 	)
 
