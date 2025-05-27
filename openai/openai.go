@@ -176,9 +176,11 @@ func (client Client) ask(modelID ChatModel, systemPrompt string, history slicev.
 		})
 	}
 
-	temperatureOpt := param.NullOpt[float64]()
+	var temperatureOpt param.Opt[float64]
 	if temperature != nil {
 		temperatureOpt = param.NewOpt(*temperature)
+	} else {
+		temperatureOpt = param.Null[float64]()
 	}
 
 	response, err := client.client.Chat.Completions.New(context.Background(), openai.ChatCompletionNewParams{
