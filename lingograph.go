@@ -338,10 +338,10 @@ func (p parallel) Execute(chat Chat) error {
 	return nil
 }
 
-type condition func(store.StoreRO) bool
+type Condition func(store.StoreRO) bool
 
 type while struct {
-	condition condition
+	condition Condition
 	pipeline  Pipeline
 }
 
@@ -360,12 +360,12 @@ func (w while) trims() bool {
 	return w.pipeline.trims()
 }
 
-func While(condition condition, pipeline Pipeline) Pipeline {
+func While(condition Condition, pipeline Pipeline) Pipeline {
 	return while{pipeline: pipeline, condition: condition}
 }
 
 type ifPipeline struct {
-	condition condition
+	condition Condition
 	left      Pipeline
 	right     Pipeline
 }
@@ -382,6 +382,6 @@ func (p ifPipeline) trims() bool {
 	return p.left.trims() && p.right.trims()
 }
 
-func If(condition condition, left Pipeline, right Pipeline) Pipeline {
+func If(condition Condition, left Pipeline, right Pipeline) Pipeline {
 	return ifPipeline{condition: condition, left: left, right: right}
 }
