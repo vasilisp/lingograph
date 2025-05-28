@@ -53,12 +53,12 @@ type Chat interface {
 
 	write(message Message)
 	trim()
-	Store() store.Store
+	store() store.Store
 }
 
 type chat struct {
 	history      []Message
-	store        store.Store
+	storeImpl    store.Store
 	offsetUnique int
 }
 
@@ -84,8 +84,8 @@ func (c *chat) trim() {
 	c.offsetUnique = 0
 }
 
-func (c *chat) Store() store.Store {
-	return c.store
+func (c *chat) store() store.Store {
+	return c.storeImpl
 }
 
 func (c *chat) uniqueMessages() []Message {
@@ -95,7 +95,7 @@ func (c *chat) uniqueMessages() []Message {
 // NewChat creates and returns a new Chat instance with an empty history
 // and a fresh store.
 func NewChat() Chat {
-	return &chat{history: make([]Message, 0), store: store.NewStore(), offsetUnique: 0}
+	return &chat{history: make([]Message, 0), storeImpl: store.NewStore(), offsetUnique: 0}
 }
 
 const userActorID actorID = 0
@@ -205,7 +205,7 @@ func (a *ActorPipeline) Execute(chat Chat) error {
 	retryLimit := max(1, a.retryLimit)
 
 	for i := range retryLimit {
-		newMessages, err = a.fn(history, chat.Store())
+		newMessages, err = a.fn(history, chat.store())
 		if err == nil {
 			break
 		}
@@ -283,7 +283,7 @@ func split(c Chat, nr int) []*chat {
 		splitters[i] = &chat{
 			history:      messages,
 			offsetUnique: len(messages),
-			store:        c.Store(),
+			storeImpl:    c.store(),
 		}
 	}
 
@@ -372,7 +372,7 @@ type while struct {
 }
 
 func (w while) Execute(chat Chat) error {
-	for w.condition(chat.Store().RO()) {
+	for w.condition(chat.store().RO()) {
 		err := w.pipeline.Execute(chat)
 		if err != nil {
 			return err
@@ -399,7 +399,7 @@ type ifPipeline struct {
 }
 
 func (p ifPipeline) Execute(chat Chat) error {
-	if p.condition(chat.Store().RO()) {
+	if p.condition(chat.store().RO()) {
 		return p.left.Execute(chat)
 	}
 	return p.right.Execute(chat)
