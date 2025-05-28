@@ -178,7 +178,7 @@ func NewActorUnsafe(role Role, fn func(slicev.RO[Message], store.Store) ([]Messa
 	}
 }
 
-type ActorPipeline struct {
+type actorPipeline struct {
 	Actor
 	echo       func(Message)
 	trim       bool
@@ -188,7 +188,7 @@ type ActorPipeline struct {
 // Pipeline creates a new Pipeline from the Actor with the specified echo callback,
 // trim flag, and retry limit.
 func (a Actor) Pipeline(echo func(Message), trim bool, retryLimit int) Pipeline {
-	return &ActorPipeline{
+	return &actorPipeline{
 		Actor:      a,
 		echo:       echo,
 		trim:       trim,
@@ -196,7 +196,7 @@ func (a Actor) Pipeline(echo func(Message), trim bool, retryLimit int) Pipeline 
 	}
 }
 
-func (a *ActorPipeline) Execute(chat Chat) error {
+func (a *actorPipeline) Execute(chat Chat) error {
 	history := chat.History()
 
 	var err error
@@ -238,7 +238,7 @@ func (a *ActorPipeline) Execute(chat Chat) error {
 	return nil
 }
 
-func (a *ActorPipeline) trims() bool {
+func (a *actorPipeline) trims() bool {
 	return a.trim
 }
 
