@@ -13,6 +13,7 @@ import (
 
 const maxHistoryLength = 1000
 
+// Role represents the role of a participant in a conversation.
 type Role uint8
 
 const (
@@ -35,6 +36,9 @@ func (r Role) String() string {
 
 type actorID uint32
 
+// Message represents a single message in a conversation with its role and
+// content. The ModelMetadata field can be used to store model-specific
+// metadata.
 type Message struct {
 	Role          Role
 	Content       string
@@ -42,8 +46,11 @@ type Message struct {
 	ModelMetadata any
 }
 
+// Chat describes the state of a conversation.
 type Chat interface {
+	// History returns the history of the conversation as a read-only slice.
 	History() slicev.RO[Message]
+
 	write(message Message)
 	trim()
 	Store() store.Store
@@ -85,6 +92,8 @@ func (c *chat) uniqueMessages() []Message {
 	return c.history[c.offsetUnique:]
 }
 
+// NewChat creates and returns a new Chat instance with an empty history
+// and a fresh store.
 func NewChat() Chat {
 	return &chat{history: make([]Message, 0), store: store.NewStore(), offsetUnique: 0}
 }
@@ -93,6 +102,8 @@ const userActorID actorID = 0
 
 var lastActorID uint32 = 0
 
+// Pipeline describes a sequence of operations that can be executed on a Chat
+// instance.
 type Pipeline interface {
 	Execute(chat Chat) error
 	trims() bool
@@ -119,16 +130,22 @@ func (a *staticPipeline) trims() bool {
 	return a.trim
 }
 
+// UserPrompt creates a Pipeline that writes a user message to the chat history.
+// If trim is true, it clears the chat history before writing the message.
 func UserPrompt(message string, trim bool) Pipeline {
 	return &staticPipeline{actorID: userActorID, roleID: User, message: message, trim: trim}
 }
 
+// Actor represents a participant in the conversation that can generate
+// messages based on the chat history and store state.
 type Actor struct {
 	actorID actorID
 	roleID  Role
 	fn      func(slicev.RO[Message], store.Store) ([]Message, error)
 }
 
+// NewActor creates a new Actor with the specified role and message generation function.
+// The function receives the chat history and store, and returns a message content and error.
 func NewActor(role Role, fn func(slicev.RO[Message], store.Store) (string, error)) Actor {
 	util.Assert(fn != nil, "NewActor nil fn")
 
@@ -149,6 +166,8 @@ func NewActor(role Role, fn func(slicev.RO[Message], store.Store) (string, error
 	}
 }
 
+// NewActorUnsafe creates a new Actor with the specified role and message generation function.
+// Unlike NewActor, this function allows returning multiple messages at once.
 func NewActorUnsafe(role Role, fn func(slicev.RO[Message], store.Store) ([]Message, error)) Actor {
 	util.Assert(fn != nil, "NewActorUnsafe nil fn")
 
@@ -166,6 +185,8 @@ type ActorPipeline struct {
 	retryLimit int
 }
 
+// Pipeline creates a new Pipeline from the Actor with the specified echo callback,
+// trim flag, and retry limit.
 func (a Actor) Pipeline(echo func(Message), trim bool, retryLimit int) Pipeline {
 	return &ActorPipeline{
 		Actor:      a,
@@ -225,6 +246,11 @@ type chain struct {
 	pipelines []Pipeline
 }
 
+// Chain creates a Pipeline that executes multiple pipelines in sequence.
+func Chain(pipelines ...Pipeline) Pipeline {
+	return chain{pipelines: pipelines}
+}
+
 func (c chain) Execute(chat Chat) error {
 	for _, pipeline := range c.pipelines {
 		err := pipeline.Execute(chat)
@@ -244,10 +270,6 @@ func (c chain) trims() bool {
 	}
 
 	return false
-}
-
-func Chain(pipelines ...Pipeline) Pipeline {
-	return chain{pipelines: pipelines}
 }
 
 func split(c Chat, nr int) []*chat {
@@ -272,6 +294,7 @@ type parallel struct {
 	pipelines []Pipeline
 }
 
+// Parallel creates a Pipeline that executes multiple pipelines concurrently.
 func Parallel(pipelines ...Pipeline) Pipeline {
 	return parallel{pipelines: pipelines}
 }
@@ -338,8 +361,11 @@ func (p parallel) Execute(chat Chat) error {
 	return nil
 }
 
+// Condition is a predicate over the store.
 type Condition func(store.StoreRO) bool
 
+// While creates a Pipeline that repeatedly executes the given pipeline
+// as long as the condition evaluates to true.
 type while struct {
 	condition Condition
 	pipeline  Pipeline
@@ -364,6 +390,8 @@ func While(condition Condition, pipeline Pipeline) Pipeline {
 	return while{pipeline: pipeline, condition: condition}
 }
 
+// If creates a Pipeline that executes either the left or right pipeline
+// based on the evaluation of the condition.
 type ifPipeline struct {
 	condition Condition
 	left      Pipeline
