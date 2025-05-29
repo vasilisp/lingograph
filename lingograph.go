@@ -364,8 +364,6 @@ func (p parallel) Execute(chat Chat) error {
 // Condition is a predicate over the store.
 type Condition func(store.StoreRO) bool
 
-// While creates a Pipeline that repeatedly executes the given pipeline
-// as long as the condition evaluates to true.
 type while struct {
 	condition Condition
 	pipeline  Pipeline
@@ -386,12 +384,12 @@ func (w while) trims() bool {
 	return w.pipeline.trims()
 }
 
+// While creates a Pipeline that repeatedly executes the given pipeline
+// as long as the condition evaluates to true.
 func While(condition Condition, pipeline Pipeline) Pipeline {
 	return while{pipeline: pipeline, condition: condition}
 }
 
-// If creates a Pipeline that executes either the left or right pipeline
-// based on the evaluation of the condition.
 type ifPipeline struct {
 	condition Condition
 	left      Pipeline
@@ -410,6 +408,8 @@ func (p ifPipeline) trims() bool {
 	return p.left.trims() && p.right.trims()
 }
 
+// If creates a Pipeline that executes either the left or right pipeline
+// based on the condition.
 func If(condition Condition, left Pipeline, right Pipeline) Pipeline {
 	return ifPipeline{condition: condition, left: left, right: right}
 }
