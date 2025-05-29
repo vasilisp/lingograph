@@ -138,7 +138,11 @@ func UserPrompt(message string, trim bool) Pipeline {
 
 // Actor represents a participant in the conversation that can generate
 // messages based on the chat history and store state.
-type Actor struct {
+type Actor interface {
+	Pipeline(echo func(Message), trim bool, retryLimit int) Pipeline
+}
+
+type actor struct {
 	actorID actorID
 	roleID  Role
 	fn      func(slicev.RO[Message], store.Store) ([]Message, error)
@@ -159,7 +163,7 @@ func NewActor(role Role, fn func(slicev.RO[Message], store.Store) (string, error
 		return []Message{{Role: role, Content: content}}, nil
 	}
 
-	return Actor{
+	return actor{
 		actorID: actorID(atomic.AddUint32(&lastActorID, 1)),
 		roleID:  role,
 		fn:      fnWrapped,
@@ -171,7 +175,7 @@ func NewActor(role Role, fn func(slicev.RO[Message], store.Store) (string, error
 func NewActorUnsafe(role Role, fn func(slicev.RO[Message], store.Store) ([]Message, error)) Actor {
 	util.Assert(fn != nil, "NewActorUnsafe nil fn")
 
-	return Actor{
+	return actor{
 		actorID: actorID(atomic.AddUint32(&lastActorID, 1)),
 		roleID:  role,
 		fn:      fn,
@@ -179,7 +183,7 @@ func NewActorUnsafe(role Role, fn func(slicev.RO[Message], store.Store) ([]Messa
 }
 
 type actorPipeline struct {
-	Actor
+	actor
 	echo       func(Message)
 	trim       bool
 	retryLimit int
@@ -187,9 +191,9 @@ type actorPipeline struct {
 
 // Pipeline creates a new Pipeline from the Actor with the specified echo callback,
 // trim flag, and retry limit.
-func (a Actor) Pipeline(echo func(Message), trim bool, retryLimit int) Pipeline {
+func (a actor) Pipeline(echo func(Message), trim bool, retryLimit int) Pipeline {
 	return &actorPipeline{
-		Actor:      a,
+		actor:      a,
 		echo:       echo,
 		trim:       trim,
 		retryLimit: retryLimit,
