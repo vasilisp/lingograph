@@ -163,7 +163,7 @@ func NewActor(role Role, fn func(slicev.RO[Message], store.Store) (string, error
 		return []Message{{Role: role, Content: content}}, nil
 	}
 
-	return actor{
+	return &actor{
 		actorID: actorID(atomic.AddUint32(&lastActorID, 1)),
 		roleID:  role,
 		fn:      fnWrapped,
@@ -175,7 +175,7 @@ func NewActor(role Role, fn func(slicev.RO[Message], store.Store) (string, error
 func NewActorUnsafe(role Role, fn func(slicev.RO[Message], store.Store) ([]Message, error)) Actor {
 	util.Assert(fn != nil, "NewActorUnsafe nil fn")
 
-	return actor{
+	return &actor{
 		actorID: actorID(atomic.AddUint32(&lastActorID, 1)),
 		roleID:  role,
 		fn:      fn,
@@ -191,9 +191,9 @@ type actorPipeline struct {
 
 // Pipeline creates a new Pipeline from the Actor with the specified echo callback,
 // trim flag, and retry limit.
-func (a actor) Pipeline(echo func(Message), trim bool, retryLimit int) Pipeline {
+func (a *actor) Pipeline(echo func(Message), trim bool, retryLimit int) Pipeline {
 	return &actorPipeline{
-		actor:      a,
+		actor:      *a,
 		echo:       echo,
 		trim:       trim,
 		retryLimit: retryLimit,
@@ -252,10 +252,10 @@ type chain struct {
 
 // Chain creates a Pipeline that executes multiple pipelines in sequence.
 func Chain(pipelines ...Pipeline) Pipeline {
-	return chain{pipelines: pipelines}
+	return &chain{pipelines: pipelines}
 }
 
-func (c chain) Execute(chat Chat) error {
+func (c *chain) Execute(chat Chat) error {
 	for _, pipeline := range c.pipelines {
 		err := pipeline.Execute(chat)
 		if err != nil {
@@ -266,7 +266,7 @@ func (c chain) Execute(chat Chat) error {
 	return nil
 }
 
-func (c chain) trims() bool {
+func (c *chain) trims() bool {
 	for _, pipeline := range c.pipelines {
 		if pipeline.trims() {
 			return true
@@ -300,10 +300,10 @@ type parallel struct {
 
 // Parallel creates a Pipeline that executes multiple pipelines concurrently.
 func Parallel(pipelines ...Pipeline) Pipeline {
-	return parallel{pipelines: pipelines}
+	return &parallel{pipelines: pipelines}
 }
 
-func (p parallel) trims() bool {
+func (p *parallel) trims() bool {
 	for _, pipeline := range p.pipelines {
 		if !pipeline.trims() {
 			return false
@@ -312,7 +312,7 @@ func (p parallel) trims() bool {
 	return true
 }
 
-func (p parallel) Execute(chat Chat) error {
+func (p *parallel) Execute(chat Chat) error {
 	if len(p.pipelines) == 0 {
 		return nil
 	}
@@ -373,7 +373,13 @@ type while struct {
 	pipeline  Pipeline
 }
 
-func (w while) Execute(chat Chat) error {
+// While creates a Pipeline that repeatedly executes the given pipeline
+// as long as the condition evaluates to true.
+func While(condition Condition, pipeline Pipeline) Pipeline {
+	return &while{pipeline: pipeline, condition: condition}
+}
+
+func (w *while) Execute(chat Chat) error {
 	for w.condition(chat.store().RO()) {
 		err := w.pipeline.Execute(chat)
 		if err != nil {
@@ -384,14 +390,8 @@ func (w while) Execute(chat Chat) error {
 	return nil
 }
 
-func (w while) trims() bool {
+func (w *while) trims() bool {
 	return w.pipeline.trims()
-}
-
-// While creates a Pipeline that repeatedly executes the given pipeline
-// as long as the condition evaluates to true.
-func While(condition Condition, pipeline Pipeline) Pipeline {
-	return while{pipeline: pipeline, condition: condition}
 }
 
 type ifPipeline struct {
@@ -400,20 +400,20 @@ type ifPipeline struct {
 	right     Pipeline
 }
 
-func (p ifPipeline) Execute(chat Chat) error {
+// If creates a Pipeline that executes either the left or right pipeline
+// based on the condition.
+func If(condition Condition, left Pipeline, right Pipeline) Pipeline {
+	return &ifPipeline{condition: condition, left: left, right: right}
+}
+
+func (p *ifPipeline) Execute(chat Chat) error {
 	if p.condition(chat.store().RO()) {
 		return p.left.Execute(chat)
 	}
 	return p.right.Execute(chat)
 }
 
-func (p ifPipeline) trims() bool {
+func (p *ifPipeline) trims() bool {
 	// CHECKME: grey area
 	return p.left.trims() && p.right.trims()
-}
-
-// If creates a Pipeline that executes either the left or right pipeline
-// based on the condition.
-func If(condition Condition, left Pipeline, right Pipeline) Pipeline {
-	return ifPipeline{condition: condition, left: left, right: right}
 }
