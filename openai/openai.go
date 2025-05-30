@@ -20,6 +20,7 @@ import (
 	"github.com/vasilisp/lingograph/store"
 )
 
+// ChatModel represents the different OpenAI chat models.
 type ChatModel uint8
 
 const (
@@ -50,10 +51,17 @@ func (m ChatModel) ToOpenAI() openai.ChatModel {
 	return openai.ChatModelGPT4o
 }
 
-type Client struct {
+type client struct {
 	client *openai.Client
 }
 
+// Client defines the interface for interacting with OpenAI's API for chat completions.
+type Client interface {
+	ask(modelID ChatModel, systemPrompt string, history slicev.RO[lingograph.Message], functions map[string]function, r store.Store, temperature *float64) ([]lingograph.Message, error)
+}
+
+// APIKeyFromEnv retrieves the OpenAI API key from the OPENAI_API_KEY environment variable.
+// It will panic if the environment variable is not set.
 func APIKeyFromEnv() string {
 	key, exists := os.LookupEnv("OPENAI_API_KEY")
 	if !exists {
@@ -62,21 +70,24 @@ func APIKeyFromEnv() string {
 	return key
 }
 
+// NewClient creates a new OpenAI client with the provided API key.
+// It will panic if the API key is empty.
 func NewClient(apiKey string) Client {
 	if apiKey == "" {
 		log.Fatal("apiKey is empty")
 	}
-	client := openai.NewClient(option.WithAPIKey(apiKey))
-	return Client{client: &client}
+
+	cl := openai.NewClient(option.WithAPIKey(apiKey))
+	return &client{client: &cl}
 }
 
-type Function struct {
+type function struct {
 	name string
 	def  openai.FunctionDefinitionParam
 	fn   func(string, store.Store) ([]lingograph.Message, error)
 }
 
-func call(functions map[string]Function, toolCall openai.ChatCompletionMessageToolCall, r store.Store) ([]lingograph.Message, error) {
+func call(functions map[string]function, toolCall openai.ChatCompletionMessageToolCall, r store.Store) ([]lingograph.Message, error) {
 	fn, ok := functions[toolCall.Function.Name]
 	if !ok {
 		return nil, fmt.Errorf("function not found")
@@ -108,7 +119,7 @@ type functionCallID struct {
 	ID string
 }
 
-func (client Client) ask(modelID ChatModel, systemPrompt string, history slicev.RO[lingograph.Message], functions map[string]Function, r store.Store, temperature *float64) ([]lingograph.Message, error) {
+func (client *client) ask(modelID ChatModel, systemPrompt string, history slicev.RO[lingograph.Message], functions map[string]function, r store.Store, temperature *float64) ([]lingograph.Message, error) {
 	length := history.Len()
 	if systemPrompt != "" {
 		length++
@@ -228,15 +239,23 @@ func (client Client) ask(modelID ChatModel, systemPrompt string, history slicev.
 	return responseMessages, nil
 }
 
-type Actor struct {
+type actor struct {
 	lingoActor lingograph.Actor
-	functions  map[string]Function
+	functions  map[string]function
 }
 
-func NewActor(client Client, chatModel ChatModel, systemPrompt string, temperature *float64) Actor {
-	functions := make(map[string]Function)
+// Actor is an OpenAI-specific Actor implementation.
+type Actor interface {
+	addFunction(fn function)
+	Pipeline(echo func(lingograph.Message), trim bool, retryLimit int) lingograph.Pipeline
+}
 
-	actor := Actor{functions: functions}
+// NewActor creates a new Actor instance with the specified client, chat model,
+// system prompt, and optional temperature setting.
+func NewActor(client Client, chatModel ChatModel, systemPrompt string, temperature *float64) Actor {
+	functions := make(map[string]function)
+
+	actor := actor{functions: functions}
 
 	actor.lingoActor = lingograph.NewActorUnsafe(
 		lingograph.Assistant,
@@ -245,14 +264,14 @@ func NewActor(client Client, chatModel ChatModel, systemPrompt string, temperatu
 		},
 	)
 
-	return actor
+	return &actor
 }
 
-func (a Actor) addFunction(fn Function) {
+func (a *actor) addFunction(fn function) {
 	a.functions[fn.name] = fn
 }
 
-func InlineRefs(s *jsonschema.Schema) (*jsonschema.Schema, error) {
+func inlineRefs(s *jsonschema.Schema) (*jsonschema.Schema, error) {
 	if s.Ref != "" {
 		if s.Definitions == nil {
 			return nil, fmt.Errorf("schema has $ref but no definitions")
@@ -333,6 +352,8 @@ func extractDefKey(ref string) (string, error) {
 	return ref[len(prefix):], nil
 }
 
+// ToOpenAISchema converts a jsonschema.Schema to OpenAI's function calling schema format.
+// It handles properties, arrays, enums, and other schema features.
 func ToOpenAISchema(s *jsonschema.Schema) (map[string]any, error) {
 	if s == nil {
 		return nil, errors.New("schema is nil")
@@ -390,12 +411,15 @@ func ToOpenAISchema(s *jsonschema.Schema) (map[string]any, error) {
 	return out, nil
 }
 
+// AddFunctionUnsafe adds a function to the Actor that can be called by the OpenAI model.
+// The function takes an input type I and returns a slice of strings.
+// This is an unsafe version that allows for multiple unstructured output messages.
 func AddFunctionUnsafe[I any](a Actor, name string, description string, fn func(I, store.Store) ([]string, error)) {
 	var zero I
 	reflector := &jsonschema.Reflector{}
 	schema := reflector.Reflect(&zero)
 
-	inlinedSchema, err := InlineRefs(schema)
+	inlinedSchema, err := inlineRefs(schema)
 	if err != nil {
 		log.Fatalf("cannot inline schema: %s", err)
 	}
@@ -425,7 +449,7 @@ func AddFunctionUnsafe[I any](a Actor, name string, description string, fn func(
 		return messages, nil
 	}
 
-	a.addFunction(Function{
+	a.addFunction(function{
 		name: name,
 		def: openai.FunctionDefinitionParam{
 			Name:        name,
@@ -436,6 +460,9 @@ func AddFunctionUnsafe[I any](a Actor, name string, description string, fn func(
 	})
 }
 
+// AddFunction adds a function to the Actor that can be called by the OpenAI model.
+// The function takes an input type I and returns an output type O.
+// The output will be automatically marshaled to JSON.
 func AddFunction[I any, O any](a Actor, name string, description string, fn func(I, store.Store) (O, error)) {
 	AddFunctionUnsafe(a, name, description,
 		func(i I, r store.Store) ([]string, error) {
@@ -453,10 +480,10 @@ func AddFunction[I any, O any](a Actor, name string, description string, fn func
 		})
 }
 
-func (a Actor) LingographActor() lingograph.Actor {
+func (a *actor) LingographActor() lingograph.Actor {
 	return a.lingoActor
 }
 
-func (a Actor) Pipeline(echo func(lingograph.Message), trim bool, retryLimit int) lingograph.Pipeline {
+func (a *actor) Pipeline(echo func(lingograph.Message), trim bool, retryLimit int) lingograph.Pipeline {
 	return a.lingoActor.Pipeline(echo, trim, retryLimit)
 }
