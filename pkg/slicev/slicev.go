@@ -1,45 +1,63 @@
 package slicev
 
 // RO provides read-only access to a slice of type T
-type RO[T any] struct {
+type RO[T any] interface {
+	// Len returns the number of elements in the slice
+	Len() int
+	// At returns the element at index i
+	At(i int) T
+	// CopyTo copies elements to the destination slice
+	CopyTo(dst []T) int
+	// Iterator returns an iterator over the elements
+	Iterator() Iterator[T]
+	seal()
+}
+
+type ro[T any] struct {
 	slice []T
 }
 
 // NewRO creates a new read-only wrapper around a slice
 func NewRO[T any](slice []T) RO[T] {
-	return RO[T]{slice: slice}
+	return &ro[T]{slice: slice}
 }
 
-// Len returns the number of elements
-func (r RO[T]) Len() int {
+func (r *ro[T]) Len() int {
 	return len(r.slice)
 }
 
-// At returns the element at index i
-func (r RO[T]) At(i int) T {
+func (r *ro[T]) At(i int) T {
 	return r.slice[i]
 }
 
-func (r RO[T]) CopyTo(dst []T) int {
+func (r *ro[T]) CopyTo(dst []T) int {
 	return copy(dst, r.slice)
 }
 
-// Iterator returns an iterator over the elements
-func (r RO[T]) Iterator() *Iterator[T] {
-	return &Iterator[T]{
+func (r *ro[T]) Iterator() Iterator[T] {
+	return &iterator[T]{
 		slice:   r.slice,
 		current: 0,
 	}
 }
 
+func (r *ro[T]) seal() {}
+
 // Iterator provides iteration over elements
-type Iterator[T any] struct {
+type Iterator[T any] interface {
+	// Next advances to the next element and returns true if there is one
+	Next() bool
+	// Value returns the current element
+	Value() T
+	seal()
+}
+
+type iterator[T any] struct {
 	slice   []T
 	current int
 }
 
-// Next advances to the next element and returns true if there is one
-func (it *Iterator[T]) Next() bool {
+func (it *iterator[T]) Next() bool {
 	if it.current >= len(it.slice) {
 		return false
 	}
@@ -47,7 +65,8 @@ func (it *Iterator[T]) Next() bool {
 	return true
 }
 
-// Value returns the current element
-func (it *Iterator[T]) Value() T {
+func (it *iterator[T]) Value() T {
 	return it.slice[it.current-1]
 }
+
+func (it *iterator[T]) seal() {}

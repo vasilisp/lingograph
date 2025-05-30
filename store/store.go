@@ -9,14 +9,25 @@ import (
 // stores, so types have to be the same globally
 var nextID int64
 
-// Store is a heterogeneous key-value map.
-type Store struct {
-	vars *sync.Map
+// Store is an interface that defines the operations for a heterogeneous key-value map.
+type Store interface {
+	// RO returns a read-only view of the Store.
+	RO() StoreRO
+	vars() *sync.Map
+}
+
+// store is a heterogeneous key-value map.
+type store struct {
+	varsMap *sync.Map
+}
+
+func (s *store) vars() *sync.Map {
+	return s.varsMap
 }
 
 // NewStore creates a new Store.
 func NewStore() Store {
-	return Store{vars: &sync.Map{}}
+	return &store{varsMap: &sync.Map{}}
 }
 
 // Var is a unique identifier for a variable in the Store.
@@ -34,7 +45,7 @@ func FreshVar[T any]() Var[T] {
 func Get[T any](r Store, v Var[T]) (T, bool) {
 	var valT T
 
-	val, found := r.vars.Load(v.id)
+	val, found := r.vars().Load(v.id)
 	if !found {
 		return valT, false
 	}
@@ -49,21 +60,28 @@ func Get[T any](r Store, v Var[T]) (T, bool) {
 
 // Set sets the value of a Var in the Store.
 func Set[T any](r Store, v Var[T], val T) {
-	r.vars.Store(v.id, val)
+	r.vars().Store(v.id, val)
 }
 
 // StoreRO is a read-only view of a Store.
-type StoreRO struct {
-	store Store
+type StoreRO interface {
+	store() Store
 }
 
-// RO returns a read-only view of the Store.
-func (r Store) RO() StoreRO {
-	return StoreRO{store: r}
+type storeRO struct {
+	r Store
+}
+
+func (s *storeRO) store() Store {
+	return s.r
+}
+
+func (r *store) RO() StoreRO {
+	return &storeRO{r: r}
 }
 
 // GetRO retrieves the value of a Var from the read-only Store. The second
 // return value indicates whether the variable was bound.
 func GetRO[T any](r StoreRO, v Var[T]) (T, bool) {
-	return Get(r.store, v)
+	return Get(r.store(), v)
 }
