@@ -247,7 +247,7 @@ type actor struct {
 // Actor is an OpenAI-specific Actor implementation.
 type Actor interface {
 	addFunction(fn function)
-	Pipeline(echo func(lingograph.Message), trim bool, retryLimit int) lingograph.Pipeline
+	lingograph.Actor
 }
 
 // NewActor creates a new Actor instance with the specified client, chat model,
@@ -478,10 +478,6 @@ func AddFunction[I any, O any](a Actor, name string, description string, fn func
 
 			return []string{string(json)}, nil
 		})
-}
-
-func (a *actor) LingographActor() lingograph.Actor {
-	return a.lingoActor
 }
 
 func (a *actor) Pipeline(echo func(lingograph.Message), trim bool, retryLimit int) lingograph.Pipeline {
