@@ -417,3 +417,7 @@ func (p *ifPipeline) trims() bool {
 	// CHECKME: grey area
 	return p.left.trims() && p.right.trims()
 }
+
+func Get[T any](c Chat, v store.Var[T]) (T, bool) {
+	return store.Get(c.store(), v)
+}
