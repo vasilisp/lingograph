@@ -193,19 +193,17 @@ func (client *client) ask(modelID ChatModel, systemPrompt string, history slicev
 		})
 	}
 
-	var temperatureOpt param.Opt[float64]
-	if temperature != nil {
-		temperatureOpt = param.NewOpt(*temperature)
-	} else {
-		temperatureOpt = param.Null[float64]()
+	params := openai.ChatCompletionNewParams{
+		Model:    modelID.ToOpenAI(),
+		Messages: messages,
+		Tools:    toolParams,
 	}
 
-	response, err := client.client.Chat.Completions.New(context.Background(), openai.ChatCompletionNewParams{
-		Model:       modelID.ToOpenAI(),
-		Messages:    messages,
-		Tools:       toolParams,
-		Temperature: temperatureOpt,
-	})
+	if temperature != nil {
+		params.Temperature = param.NewOpt(*temperature)
+	}
+
+	response, err := client.client.Chat.Completions.New(context.Background(), params)
 	if err != nil {
 		return nil, err
 	}
