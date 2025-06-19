@@ -29,6 +29,8 @@ const (
 	GPT41
 	GPT41Mini
 	GPT41Nano
+	O3Mini
+	O3
 )
 
 func (m ChatModel) ToOpenAI() openai.ChatModel {
@@ -43,6 +45,10 @@ func (m ChatModel) ToOpenAI() openai.ChatModel {
 		return "gpt-4.1-mini"
 	case GPT41Nano:
 		return "gpt-4.1-nano"
+	case O3Mini:
+		return "o3-mini"
+	case O3:
+		return "o3"
 	default:
 		util.Assert(false, "invalid chat model")
 	}
