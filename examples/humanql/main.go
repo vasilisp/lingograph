@@ -30,7 +30,7 @@ func main() {
 	chat := lingograph.NewChat()
 
 	client := openai.NewClient(openai.APIKeyFromEnv())
-	openAIActor := openai.NewActor(client, openai.GPT41Nano, systemPrompt, nil)
+	openAIActor := openai.NewActor(client, openai.GPT5Nano, systemPrompt, nil)
 
 	db := make(map[string]Person)
 
