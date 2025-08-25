@@ -4,9 +4,9 @@ go 1.24.2
 
 require (
 	github.com/invopop/jsonschema v0.13.0
-	github.com/openai/openai-go v1.2.0
+	github.com/openai/openai-go v1.12.0
 	github.com/wk8/go-ordered-map/v2 v2.1.8
-	golang.org/x/text v0.25.0
+	golang.org/x/text v0.28.0
 )
 
 require (
